@@ -15,28 +15,23 @@
  * 
  *  mpiexec -n 4 ./baseline ./baseline.nc
 
- * netcdf testfile {
- * // file format: CDF-1
- * dimensions:
- *         rank_0_y = 10 ;
- *         rank_0_x = 4 ;
- *         rank_1_y = 10 ;
- *         rank_1_x = 4 ;
- *         rank_2_y = 10 ;
- *         rank_2_x = 4 ;
- *         rank_3_y = 10 ;
- *         rank_3_x = 4 ;
- * variables:
-        int var_0(rank_0_y, rank_0_x) ;
-                var_0:float_att_name = 0.f, 1.f, 2.f, 3.f, 4.f, 5.f, 6.f, 7.f ;
-        int var_1(rank_1_y, rank_1_x) ;
-                var_1:float_att_name = 0.f, 1.f, 2.f, 3.f, 4.f, 5.f, 6.f, 7.f ;
-        int var_2(rank_2_y, rank_2_x) ;
-                var_2:float_att_name = 0.f, 1.f, 2.f, 3.f, 4.f, 5.f, 6.f, 7.f ;
-        int var_3(rank_3_y, rank_3_x) ;
-                var_3:float_att_name = 0.f, 1.f, 2.f, 3.f, 4.f, 5.f, 6.f, 7.f ;
+netcdf baseline {
+// file format: CDF-1
+dimensions:
+        dim_0_0 = 1 ;
+        dim_0_1 = 1 ;
+        dim_1_0 = 2 ;
+        dim_1_1 = 2 ;
+        dim_2_0 = 3 ;
+        dim_2_1 = 3 ;
+        dim_3_0 = 4 ;
+        dim_3_1 = 4 ;
+variables:
+        int var_0_0(dim_0_0, dim_0_1) ;
+        int var_1_0(dim_1_0, dim_1_1) ;
+        int var_2_0(dim_2_0, dim_2_1) ;
+        int var_3_0(dim_3_0, dim_3_1) ;
 }
- *    }
  * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * */
 
 #include <stdio.h>
