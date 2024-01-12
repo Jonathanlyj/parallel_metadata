@@ -50,26 +50,23 @@ static int verbose;
 
 
 
-
-
-
-
-
-
-
     /* ---------------------------------- Metadata Generation ----------------------------------------*/
+
+
 
 void create_dummy_data(int rank, struct hdr *dummy) {
     // Initialize xsz to the size of the hdr struct itself
     dummy->xsz = 0;
     int attrV_xsz, v_attrV_xsz;
     int status;
+    int att_nelems;
+    int* att_array;
 
-    // Create dummy dimensions
+    // Create dummy dimension
     dummy->dims.ndefined = rank;
     dummy->dims.value = (hdr_dim **)malloc(rank * sizeof(hdr_dim *));
     dummy->xsz += 2 * sizeof(uint32_t); // NC_Dimension and nelems
-    for (int i = 0; i < rank; i++) {
+    for (int i = 0; i < dummy->dims.ndefined; i++) {
         dummy->dims.value[i] = (hdr_dim *)malloc(sizeof(hdr_dim));
         dummy->dims.value[i]->size = i + 1;
         dummy->dims.value[i]->name_len = snprintf(NULL, 0, "dim_rank_%d_%d", rank, i);
@@ -77,35 +74,15 @@ void create_dummy_data(int rank, struct hdr *dummy) {
         sprintf(dummy->dims.value[i]->name, "dim_rank_%d_%d", rank, i);
         dummy->xsz += sizeof(uint32_t) + sizeof(char) * dummy->dims.value[i]->name_len; // dim name
         dummy->xsz += sizeof(uint32_t); //size
-    }
-
-    // Create dummy global attributes
-    dummy->attrs.ndefined = rank;
-    dummy->attrs.value = (hdr_attr **)malloc(rank * sizeof(hdr_attr *));
-
-    dummy->xsz += 2 * sizeof(uint32_t); // NC_Attribute and nelems
-    
-    for (int i = 0; i < rank; i++) {
         
-        dummy->attrs.value[i] = (hdr_attr *)malloc(sizeof(hdr_attr));
-        dummy->attrs.value[i]->nelems = i + 1;
-        dummy->attrs.value[i]->xtype = NC_INT; // Using NC_INT for simplicity
-        dummy->attrs.value[i]->name_len = snprintf(NULL, 0, "attr_rank_%d_%d", rank, i);
-        dummy->attrs.value[i]->name = (char *)malloc(dummy->attrs.value[i]->name_len + 1);
-        sprintf(dummy->attrs.value[i]->name, "attr_rank_%d_%d", rank, i);
-
-        dummy->xsz += sizeof(uint32_t) + sizeof(char) * dummy->attrs.value[i]->name_len; //attr name
-        dummy->xsz += sizeof(uint32_t); // nc_type
-        dummy->xsz += sizeof(uint32_t); // nelems
-        status = xlen_nc_type(dummy->attrs.value[i]->xtype, &attrV_xsz);
-        dummy->xsz += dummy->attrs.value[i]->nelems * attrV_xsz; // attr_value
     }
+
 
     // Create dummy variables
     dummy->vars.ndefined = rank; 
     dummy->vars.value = (hdr_var **)malloc(rank * sizeof(hdr_var *));
-    dummy->xsz += 2 * sizeof(uint32_t); // NC_Variable and nelems
-    for (int i = 0; i < rank; i++) {
+    dummy->xsz += 2 * sizeof(uint32_t); // NC_Variable and ndefined
+    for (int i = 0; i < dummy->vars.ndefined; i++) {
         dummy->vars.value[i] = (hdr_var *)malloc(sizeof(hdr_var));
         dummy->vars.value[i]->xtype = NC_INT; // Using NC_INT for simplicity
         dummy->vars.value[i]->name_len = snprintf(NULL, 0, "var_rank_%d_%d", rank, i);
@@ -117,17 +94,18 @@ void create_dummy_data(int rank, struct hdr *dummy) {
             dummy->vars.value[i]->dimids[j] = j % rank;
         }
         dummy->xsz += sizeof(uint32_t) + sizeof(char) * dummy->vars.value[i]->name_len; //var name
+        dummy->xsz += sizeof(uint32_t); //xtype
         dummy->xsz += sizeof(uint32_t); //nelems of dim list
         dummy->xsz += sizeof(uint32_t) * dummy->vars.value[i]->ndims; // dimid list
+
         
 
 
 
-        // Create dummy variable attributes
+    //     // Create dummy variable attributes
         dummy->vars.value[i]->attrs.ndefined = i;
         dummy->vars.value[i]->attrs.value = (hdr_attr **)malloc(i * sizeof(hdr_attr *));
-
-        dummy->xsz += 2 * sizeof(uint32_t); // NC_Attribute and nelems
+        dummy->xsz += 2 * sizeof(uint32_t); // NC_Attribute and ndefined
 
         for (int k = 0; k < i; k++) {
             dummy->vars.value[i]->attrs.value[k] = (hdr_attr *)malloc(sizeof(hdr_attr));
@@ -136,15 +114,24 @@ void create_dummy_data(int rank, struct hdr *dummy) {
             dummy->vars.value[i]->attrs.value[k]->name_len = snprintf(NULL, 0, "var_attr_rank_%d_%d_%d", rank, i, k);
             dummy->vars.value[i]->attrs.value[k]->name = (char *)malloc(dummy->vars.value[i]->attrs.value[k]->name_len + 1);
             sprintf(dummy->vars.value[i]->attrs.value[k]->name, "var_attr_rank_%d_%d_%d", rank, i, k);
+            att_nelems = dummy->vars.value[i]->attrs.value[k]->nelems;
+            att_array = (int*)malloc(att_nelems * sizeof(int));
+            for (int m = 0; m < att_nelems; m++) {
+                    att_array[m] = rank;
+                }
+            dummy->vars.value[i]->attrs.value[k]->xvalue = att_array;
+
 
             dummy->xsz += sizeof(uint32_t) + sizeof(char) * dummy->vars.value[i]->attrs.value[k]->name_len; //attr name
             dummy->xsz += sizeof(uint32_t); // nc_type
             dummy->xsz += sizeof(uint32_t); // nelems
             status = xlen_nc_type(dummy->vars.value[i]->attrs.value[k]->xtype, &v_attrV_xsz);
-            dummy->xsz += dummy->vars.value[i]->attrs.value[k]->nelems * attrV_xsz; // attr_value
+            dummy->xsz += dummy->vars.value[i]->attrs.value[k]->nelems * v_attrV_xsz; // attr_value
 
         }
     }
+
+
 }
 
 
@@ -152,97 +139,80 @@ void create_dummy_data(int rank, struct hdr *dummy) {
 int main(int argc, char *argv[]) {
     MPI_Init(&argc, &argv);
 
-    int rank, size;
+    int rank, size, status;
     MPI_Comm_rank(MPI_COMM_WORLD, &rank);
     MPI_Comm_size(MPI_COMM_WORLD, &size);
-
     struct hdr dummy;
     create_dummy_data(rank, &dummy);
-
    // Print the created data for each process
-    printf("Rank %d:\n", rank);
-    printf("Total Header Size: %lld\n", dummy.xsz);
-    printf("Dimensions:\n");
-    for (int i = 0; i < dummy.dims.ndefined; i++) {
-        printf("  Name: %s, Size: %lld\n", dummy.dims.value[i]->name, dummy.dims.value[i]->size);
-    }
-
-    printf("Global Attributes:\n");
-    for (int i = 0; i < dummy.attrs.ndefined; i++) {
-        printf("  Name: %s, Nelems: %lld, Type: %d\n", dummy.attrs.value[i]->name, dummy.attrs.value[i]->nelems, dummy.attrs.value[i]->xtype);
-    }
-
-    printf("Variables:\n");
-    for (int i = 0; i < dummy.vars.ndefined; i++) {
-        printf("  Name: %s, Type: %d, NumDims: %d\n", dummy.vars.value[i]->name,  dummy.vars.value[i]->xtype, dummy.vars.value[i]->ndims);
-        printf("    Dim IDs: ");
-        for (int j = 0; j < dummy.vars.value[i]->ndims; j++) {
-            printf("%d ", dummy.vars.value[i]->dimids[j]);
-        }
-        printf("\n");
-
-        printf("    Attributes:\n");
-        for (int k = 0; k < dummy.vars.value[i]->attrs.ndefined; k++) {
-            printf("      Name: %s, Nelems: %lld, Type: %d\n", dummy.vars.value[i]->attrs.value[k]->name, dummy.vars.value[i]->attrs.value[k]->nelems, dummy.vars.value[i]->attrs.value[k]->xtype);
-        }
-    }
-
-    MPI_Finalize();
-
-    // // Example: Each process has a number of dimensions equal to its rank + 1
-    // int num_dimensions = rank + 1;
-
-    // // Allocate and fill dimension collection for the current process
-    // DimensionCollection send_collection;
-    // send_collection.num_dimensions = num_dimensions;
-    // send_collection.dimension_sizes = (int*) malloc(num_dimensions * sizeof(int));
-    // send_collection.name_lengths = (int*) malloc(num_dimensions * sizeof(int));
-    // send_collection.total_names_length = 0;
-    // char* names_concat = (char*) malloc(num_dimensions * 50 * sizeof(char)); // Each name up to 50 chars
-    // names_concat[0] = '\0';
-    // for (int i = 0; i < num_dimensions; ++i) {
-    //     char dimension_name[50];
-    //     sprintf(dimension_name, "Process_%d_Dim_%d", rank, i);
-    //     send_collection.dimension_sizes[i] = rank * 10 + i;
-    //     send_collection.name_lengths[i] = strlen(dimension_name) + 1;
-    //     send_collection.total_names_length += send_collection.name_lengths[i];
-    //     strcat(names_concat, dimension_name);
-    //     strcat(names_concat, ";"); // Separator
-    // }
-    // send_collection.dimension_names = names_concat;
-
-    // // Serialize the send_collection
-    // int my_collection_size = sizeof(int) * (2 + 2 * send_collection.num_dimensions) + sizeof(char) * send_collection.total_names_length;
-    // char* send_buffer = (char*) malloc(my_collection_size);
-    // serialize(&send_collection, send_buffer);
-
-    // // Phase 1: Communicate the sizes of the DimensionCollection structure for each process
-    // int* all_collection_sizes = (int*) malloc(nprocs * sizeof(int));
-    // MPI_Allgather(&my_collection_size, 1, MPI_INT, all_collection_sizes, 1, MPI_INT, MPI_COMM_WORLD);
-
-    // // Calculate displacements for the second phase
-    // int* recv_displs = (int*) malloc(nprocs * sizeof(int));
-    // int total_recv_size = all_collection_sizes[0];
-    // recv_displs[0] = 0;
-    // for (int i = 1; i < nprocs; ++i) {
-    //     recv_displs[i] = recv_displs[i - 1] + all_collection_sizes[i - 1];
-    //     total_recv_size += all_collection_sizes[i];
+    // printf("Rank %d:\n", rank);
+    // printf("Total Header Size: %lld\n", dummy.xsz);
+    // printf("Dimensions:\n");
+    // for (int i = 0; i < dummy.dims.ndefined; i++) {
+    //     printf("  Name: %s, Size: %lld\n", dummy.dims.value[i]->name, dummy.dims.value[i]->size);
     // }
 
-    // // Allocate buffer for receiving all DimensionCollection data
-    // char* all_collections_buffer = (char*) malloc(total_recv_size);
+    // printf("Variables:\n");
+    // for (int i = 0; i < dummy.vars.ndefined; i++) {
+    //     printf("  Name: %s, Type: %d, NumDims: %d\n", dummy.vars.value[i]->name,  dummy.vars.value[i]->xtype, dummy.vars.value[i]->ndims);
+    //     printf("    Dim IDs: ");
+    //     for (int j = 0; j < dummy.vars.value[i]->ndims; j++) {
+    //         printf("%d ", dummy.vars.value[i]->dimids[j]);
+    //     }
+    //     printf("\n");
+    //     printf("    Attributes:\n");
+    //     for (int k = 0; k < dummy.vars.value[i]->attrs.ndefined; k++) {
+    //         printf("      Name: %s, Nelems: %lld, Type: %d\n", dummy.vars.value[i]->attrs.value[k]->name, dummy.vars.value[i]->attrs.value[k]->nelems, dummy.vars.value[i]->attrs.value[k]->xtype);
+    //     }
+    // }
+    // printf("rank %d, buffer size: %lld \n", rank, dummy.xsz);
+    char* send_buffer = (char*) malloc(dummy.xsz);
+    status = serialize_hdr(&dummy, send_buffer);
+    // printf("rank %d, buffer: %s", rank, send_buffer);
 
-    // // Phase 2: Communicate the actual DimensionCollection data
-    // MPI_Allgatherv(send_buffer, my_collection_size, MPI_BYTE,
-    //                all_collections_buffer, all_collection_sizes, recv_displs, MPI_BYTE, MPI_COMM_WORLD);
 
-    // printf("The collected buffer is: %s\n", all_collections_buffer);
+
+
+    
+
+
+    // Phase 1: Communicate the sizes of the header structure for each process
+    MPI_Offset* all_collection_sizes = (MPI_Offset*) malloc(size * sizeof(MPI_Offset));
+    MPI_Allgather(&dummy.xsz, 1, MPI_OFFSET, all_collection_sizes, 1, MPI_OFFSET, MPI_COMM_WORLD);
+
+    // Calculate displacements for the second phase
+    int* recv_displs = (int*) malloc(size * sizeof(int));
+    int total_recv_size = all_collection_sizes[0];
+    recv_displs[0] = 0;
+
+    
+    for (int i = 1; i < size; ++i) {
+        recv_displs[i] = recv_displs[i - 1] + all_collection_sizes[i - 1];
+        total_recv_size += all_collection_sizes[i];
+
+    }
+    
+    // printf("\nrank %d, dummy xsz %lld", rank, dummy.xsz);
+    // Allocate buffer for receiving all header data
+    char* all_collections_buffer = (char*) malloc(total_recv_size);
+
+    int* recvcounts =  (int*)malloc(size * sizeof(int));
+
+    for (int i = 0; i < size; ++i) {
+        recvcounts[i] = (int)all_collection_sizes[i];
+    }
+    // Phase 2: Communicate the actual header data
+    // Before MPI_Allgatherv
+    MPI_Allgatherv(send_buffer, dummy.xsz, MPI_BYTE, all_collections_buffer, recvcounts, recv_displs, MPI_BYTE, MPI_COMM_WORLD);
+
+
+
     // Deserialize the received data
     // For example, deserialize the data for the first process (process 0)
 
 // Deserialize the received data and print if rank is 0
 // if (rank == 0){
-//     for (int i = 0; i < nprocs; ++i) {
+//     for (int i = 0; i < size; ++i) {
 //         DimensionCollection received_collection;
 //         deserialize(all_collections_buffer + recv_displs[i], &received_collection);
 
@@ -265,16 +235,16 @@ int main(int argc, char *argv[]) {
     // ... Process the deserialized data ...
 
     // Clean up
-    // free(send_buffer);
+    free(send_buffer);
     // free(all_collections_buffer);
-    // free(all_collection_sizes);
+    free(all_collection_sizes);
     // free(recv_displs);
     // free(send_collection.dimension_sizes);
     // free(send_collection.name_lengths);
     // free(send_collection.dimension_names);
     // ... Also, free the arrays inside received_collection ...
 
-    // MPI_Finalize();
+    MPI_Finalize();
     return 0;
 
 
@@ -293,7 +263,7 @@ int main(int argc, char *argv[]) {
     
     // int dim_idx, var_idx, num_dim_idx_ct, var_dim_id_idx;
     // int local_var_ids[local_var_count];
-    // for (i=0; i<nprocs; i++){
+    // for (i=0; i<size; i++){
     //     /* define local dimensions for this process */
     //     // sprintf(dim_x_name, "rank_%d_x", i);
     //     // sprintf(dim_y_name, "rank_%d_y", i);

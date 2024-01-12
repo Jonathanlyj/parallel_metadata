@@ -89,3 +89,5 @@ static int serialize_attrarray(bufferinfo *pbp, const hdr_attrarray *ncap);
 static int serialize_var(bufferinfo *pbp, const hdr_var *varp);
 static int serialize_vararray(bufferinfo *pbp, const hdr_vararray *ncap);
 int serialize_hdr(struct hdr *ncp, void *buf);
+
+

@@ -9,6 +9,8 @@
 #include "baseline_ncx.h" 
 
 
+  /* ---------------------------------- Serializaition ----------------------------------------*/
+
 int
 xlen_nc_type(nc_type xtype, int *size)
 {
@@ -101,7 +103,7 @@ serialize_attrV(bufferinfo    *pbp,
 {
 
     int xsz;
-    MPI_Offset sz;
+    int sz;
 
     /* xlen_nc_type() returns the element size (unaligned) of
      * attrp->xtype attrp->xsz is the aligned total size of attribute values
@@ -172,7 +174,6 @@ static int
 serialize_var(bufferinfo   *pbp,
                const hdr_var *varp)
 {
-
     int i, status;
 
     /* copy name */
@@ -252,14 +253,24 @@ serialize_hdr(struct hdr *ncp, void *buf)
     status = serialize_dimarray(&putbuf, &ncp->dims);
     if (status != NC_NOERR) return status;
 
-    /* copy gatt_list */
-    status = serialize_attrarray(&putbuf, &ncp->attrs);
-    if (status != NC_NOERR) return status;
+
+
+    // /* copy gatt_list */
+    // status = serialize_attrarray(&putbuf, &ncp->attrs);
+    // if (status != NC_NOERR) return status;
 
     /* copy var_list */
     status = serialize_vararray(&putbuf, &ncp->vars);
     if (status != NC_NOERR) return status;
 
+    size_t serializedSize = putbuf.pos - putbuf.base;
+
+    // Print the result
+    // printf("Number of bytes taken after serialization: %zu\n", serializedSize);
+
+
+
     return NC_NOERR;
 }
 
+  
