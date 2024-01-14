@@ -1,5 +1,5 @@
 CC = mpicc
-CFLAGS = -O2 -g
+CFLAGS = -O0 -g 
 INCLUDES = -I/Users/liyoujia/Documents/CE499/pnetcdf/PnetCDF_install/include
 LFLAGS = -L/Users/liyoujia/Documents/CE499/pnetcdf/PnetCDF_install/lib
 LIBS = -lpnetcdf

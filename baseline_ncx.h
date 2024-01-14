@@ -91,3 +91,18 @@ static int serialize_vararray(bufferinfo *pbp, const hdr_vararray *ncap);
 int serialize_hdr(struct hdr *ncp, void *buf);
 
 
+// Deserialization functions
+int deserialize_hdr(struct hdr *ncp, void *buf, int buf_size);
+static int getn_text(void **xpp, MPI_Offset nelems, char *tp);
+static int get_uint32(void **xpp, unsigned int *ip);
+static int deserialize_nc_type(bufferinfo *gbp, nc_type *xtypep);
+static int deserialize_name(bufferinfo *gbp, char **name);
+static int deserialize_dim(bufferinfo *gbp, hdr_dim *dimp);
+static int deserialize_dimarray(bufferinfo *gbp, hdr_dimarray *ncap);
+static int deserialize_attrV(bufferinfo *gbp, hdr_attr *attrp);
+static int deserialize_attr(bufferinfo *gbp, hdr_attr *attrp);
+static int deserialize_attrarray(bufferinfo *gbp, hdr_attrarray *ncap);
+static int deserialize_var(bufferinfo *gbp, hdr_var *varp);
+static int deserialize_vararray(bufferinfo *gbp, hdr_vararray *ncap);
+
+

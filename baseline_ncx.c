@@ -273,4 +273,257 @@ serialize_hdr(struct hdr *ncp, void *buf)
     return NC_NOERR;
 }
 
-  
+  /* ---------------------------------- Deserializaition ----------------------------------------*/
+
+
+static int
+getn_text(void **xpp, MPI_Offset nelems, char *tp)
+{
+	(void) memcpy(tp, *xpp, (size_t)nelems);
+    tp[nelems] = '\0';
+	*xpp = (void *)((char *)(*xpp) + nelems);
+	return NC_NOERR;
+
+}
+
+
+static int
+get_uint32(void **xpp, unsigned int *ip)
+{
+    memcpy(ip, *xpp, 4);
+    /* advance *xpp 4 bytes */
+    *xpp = (void *)((const char *)(*xpp) + 4);
+    return NC_NOERR;
+}
+
+static int deserialize_nc_type(bufferinfo *gbp, nc_type *xtypep){
+    int err;
+    uint32_t xtype;
+    err = get_uint32((void **)(&gbp->pos), &xtype);
+    if (err != NC_NOERR) return err;
+    *xtypep = (nc_type) xtype;
+    return NC_NOERR;
+}
+
+static int deserialize_name(bufferinfo *gbp, char **name) {
+    unsigned int nchars;
+    get_uint32((void**)&gbp->pos, &nchars);
+    *name = (char *)malloc(nchars + 1);
+    if (*name == NULL) {
+        fprintf(stderr, "Memory allocation failed\n");
+        return -1;
+    }
+    getn_text((void **)&gbp->pos, nchars, *name);
+    return NC_NOERR;
+}
+
+static int deserialize_dim(bufferinfo *gbp, hdr_dim *dimp) {
+    MPI_Offset dim_length;
+    uint32_t tmp;
+    char *name;
+    int err;
+    err = deserialize_name(gbp, &name); 
+    if (err != NC_NOERR) return err;
+    get_uint32((void**)&gbp->pos, &tmp);
+    dim_length = (MPI_Offset)tmp;
+    dimp->name     = name;
+    dimp->name_len = strlen(name);
+    dimp->size     = dim_length;
+    return 0;
+}
+
+static int deserialize_dimarray(bufferinfo *gbp, hdr_dimarray *ncap) {
+    unsigned int tag;
+    get_uint32((void**)&gbp->pos, &tag);
+    if (tag == NC_UNSPECIFIED) {
+        get_uint32((void**)&gbp->pos, (unsigned int *)&ncap->ndefined);
+        assert(ncap->ndefined == 0);
+        return 0; // ABSENT
+    } else if (tag == NC_DIMENSION) {
+        get_uint32((void**)&gbp->pos, (unsigned int *)&ncap->ndefined);
+
+        ncap->value = (hdr_dim **)malloc(ncap->ndefined * sizeof(hdr_dim *));
+        if (ncap->value == NULL) {
+            fprintf(stderr, "Memory allocation failed\n");
+            return -1;
+        }
+
+        for (int i = 0; i < ncap->ndefined; i++) {
+            ncap->value[i] = (hdr_dim *)malloc(sizeof(hdr_dim));
+            if (ncap->value[i] == NULL) {
+                fprintf(stderr, "Memory allocation failed\n");
+                return -1;
+            }
+            if (deserialize_dim(gbp, ncap->value[i]) != 0) {
+                return -1;
+            }
+        }
+    }
+
+    return 0;
+}
+
+static int deserialize_attrV(bufferinfo *gbp, hdr_attr *attrp) {
+    int xsz, sz, err;
+
+    xlen_nc_type(attrp->xtype, &xsz);
+    sz = attrp->nelems * xsz;
+
+    attrp->xvalue = malloc(sz);
+    if (attrp->xvalue == NULL) {
+        fprintf(stderr, "Memory allocation failed\n");
+        return -1;
+    }
+
+    memcpy(attrp->xvalue, gbp->pos, (size_t)sz);
+    gbp->pos = (void *)((char *)(gbp->pos) + sz);
+
+    return 0;
+}
+
+static int deserialize_attr(bufferinfo *gbp, hdr_attr *attrp) {
+    uint32_t tmp;
+    int err;
+    char *name;
+    err = deserialize_name(gbp, &name);
+    if (err != NC_NOERR) return err;
+    attrp->name = name;
+    attrp->name_len = strlen(name);
+    err = deserialize_nc_type(gbp, &attrp->xtype);
+    if (err != NC_NOERR) return err;
+    err = get_uint32((void**)&gbp->pos, &tmp);
+    attrp->nelems = (int)tmp;
+    if (err != NC_NOERR) return err;
+    err = deserialize_attrV(gbp, attrp);
+    if (err != NC_NOERR) return err;
+
+    return 0;
+}
+
+static int deserialize_attrarray(bufferinfo *gbp, hdr_attrarray *ncap) {
+    unsigned int tag;
+    get_uint32((void**)&gbp->pos, &tag);
+    uint32_t tmp;
+
+    if (tag == NC_UNSPECIFIED) {
+        get_uint32((void**)&gbp->pos, &tmp);
+        ncap->ndefined = (int) tmp;
+        assert(ncap->ndefined == 0);
+        return 0; // ABSENT
+    } else if (tag == NC_ATTRIBUTE) {
+        get_uint32((void**)&gbp->pos, &tmp);
+        ncap->ndefined = (int) tmp;
+        ncap->value = (hdr_attr **)malloc(ncap->ndefined * sizeof(hdr_attr *));
+        if (ncap->value == NULL) {
+            fprintf(stderr, "Memory allocation failed\n");
+            return -1;
+        }
+        for (int i = 0; i < ncap->ndefined; i++) {
+            ncap->value[i] = (hdr_attr *)malloc(sizeof(hdr_attr));
+            if (ncap->value[i] == NULL) {
+                fprintf(stderr, "Memory allocation failed\n");
+                return -1;
+            }
+
+            if (deserialize_attr(gbp, ncap->value[i]) != 0) {
+                return -1;
+            }
+        }
+    }
+
+    return 0;
+}
+
+static int deserialize_var(bufferinfo *gbp, hdr_var *varp) {
+    int err;
+    char *name;
+    // if (deserialize_name(gbp, &varp->name) != 0) {
+    //     return -1;
+    // }
+    /* get name */
+    err = deserialize_name(gbp, &name);
+    if (err != NC_NOERR) return err;
+    varp->name = name;
+    varp->name_len = strlen(name);
+    /* nelems (number of dimensions) */
+    u_int32_t tmp;
+    get_uint32((void**)&gbp->pos, (unsigned int *)&tmp);
+    varp->ndims = (int) tmp;
+    varp->dimids = (int *)malloc(varp->ndims * sizeof(int));
+    if (varp->dimids == NULL) {
+        fprintf(stderr, "Memory allocation failed\n");
+        return -1;
+    }
+
+    for (int i = 0; i < varp->ndims; i++) {
+        get_uint32((void**)&gbp->pos, &tmp);
+        varp->dimids[i] = (int)tmp;
+    }
+
+    if (deserialize_attrarray(gbp, &varp->attrs) != 0) {
+        return -1;
+    }
+    err = deserialize_nc_type(gbp, &varp->xtype);
+    if (err != NC_NOERR) return err;
+
+    return 0;
+}
+
+static int deserialize_vararray(bufferinfo *gbp, hdr_vararray *ncap) {
+    unsigned int tag;
+    int err;
+    uint32_t tmp;
+    get_uint32((void**)&gbp->pos, &tag);
+
+    if (tag == NC_UNSPECIFIED) {
+        get_uint32((void**)&gbp->pos, (unsigned int *)&tmp);
+        ncap->ndefined = (int)tmp;
+        assert(ncap->ndefined == 0);
+        return 0; // ABSENT
+    } else if (tag == NC_VARIABLE) {
+        get_uint32((void**)&gbp->pos, (unsigned int *)&tmp);
+        ncap->ndefined = (int)tmp;
+        ncap->value = (hdr_var **)malloc(ncap->ndefined * sizeof(hdr_var *));
+        if (ncap->value == NULL) {
+            fprintf(stderr, "Memory allocation failed\n");
+            return -1;
+        }
+
+        for (int i = 0; i < ncap->ndefined; i++) {
+            ncap->value[i] = (hdr_var *)malloc(sizeof(hdr_var));
+            if (ncap->value[i] == NULL) {
+                fprintf(stderr, "Memory allocation failed\n");
+                return -1;
+            }
+            if (deserialize_var(gbp, ncap->value[i]) != 0) {
+                return -1;
+            }
+        }
+    }
+
+    return 0;
+}
+
+int deserialize_hdr(struct hdr *ncp, void *buf, int buf_size) {
+
+    int status;
+    bufferinfo getbuf;
+
+    getbuf.pos           = buf;
+    getbuf.base          = buf;
+    getbuf.size          = buf_size;
+
+    /* get dim_list from getbuf into ncp */
+    status = deserialize_dimarray(&getbuf, &ncp->dims);
+    if (status != NC_NOERR) return status;
+    
+
+    status = deserialize_vararray(&getbuf, &ncp->vars);
+    if (status != NC_NOERR) return status;
+    // printf("HERE: %ld", getbuf.pos - getbuf.base);
+    assert((int)(getbuf.pos - getbuf.base) == getbuf.size);
+
+
+
+    return 0;
+}
