@@ -1,7 +1,7 @@
 CC = mpicc
 CFLAGS = -O0 -g 
-INCLUDES = -I/Users/liyoujia/Documents/CE499/pnetcdf/PnetCDF_install/include
-LFLAGS = -L/Users/liyoujia/Documents/CE499/pnetcdf/PnetCDF_install/lib
+INCLUDES = -I$(PNETCDF_DIR)/include
+LFLAGS = -L$(PNETCDF_DIR)/lib
 LIBS = -lpnetcdf
 
 SRCS = baseline_ex1.c baseline_ncx.c
