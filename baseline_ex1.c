@@ -104,7 +104,7 @@ void create_dummy_data(int rank, struct hdr *dummy) {
     int* att_array;
 
     // Create dummy dimension
-    dummy->dims.ndefined = rank;
+    dummy->dims.ndefined = 2;
     dummy->dims.value = (hdr_dim **)malloc(rank * sizeof(hdr_dim *));
     dummy->xsz += 2 * sizeof(uint32_t); // NC_Dimension and nelems
     for (int i = 0; i < dummy->dims.ndefined; i++) {
@@ -120,8 +120,8 @@ void create_dummy_data(int rank, struct hdr *dummy) {
 
 
     // Create dummy variables
-    dummy->vars.ndefined = rank; 
-    dummy->vars.value = (hdr_var **)malloc(rank * sizeof(hdr_var *));
+    dummy->vars.ndefined = 2; 
+    dummy->vars.value = (hdr_var **)malloc(dummy->vars.ndefined * sizeof(hdr_var *));
     dummy->xsz += 2 * sizeof(uint32_t); // NC_Variable and ndefined
     for (int i = 0; i < dummy->vars.ndefined; i++) {
         dummy->vars.value[i] = (hdr_var *)malloc(sizeof(hdr_var));
@@ -129,10 +129,10 @@ void create_dummy_data(int rank, struct hdr *dummy) {
         dummy->vars.value[i]->name_len = snprintf(NULL, 0, "var_rank_%d_%d", rank, i);
         dummy->vars.value[i]->name = (char *)malloc(dummy->vars.value[i]->name_len + 1);
         sprintf(dummy->vars.value[i]->name, "var_rank_%d_%d", rank, i);
-        dummy->vars.value[i]->ndims = i + 1;
+        dummy->vars.value[i]->ndims = 2;
         dummy->vars.value[i]->dimids = (int *)malloc((i + 1) * sizeof(int));
-        for (int j = 0; j <= i; j++) {
-            dummy->vars.value[i]->dimids[j] = j % rank;
+        for (int j = 0; j <= dummy->vars.value[i]->ndims; j++) {
+            dummy->vars.value[i]->dimids[j] = j;
         }
         dummy->xsz += sizeof(uint32_t) + sizeof(char) * dummy->vars.value[i]->name_len; //var name
         dummy->xsz += sizeof(uint32_t); //xtype
@@ -185,30 +185,30 @@ int main(int argc, char *argv[]) {
     struct hdr dummy;
     struct hdr recv_hdr;
     create_dummy_data(rank, &dummy);
-   // Print the created data for each process
-    printf("\nRank %d:\n", rank);
-    printf("Total Header Size: %lld\n", dummy.xsz);
-    printf("Dimensions:\n");
-    for (int i = 0; i < dummy.dims.ndefined; i++) {
-        printf("  Name: %s, Size: %lld\n", dummy.dims.value[i]->name, dummy.dims.value[i]->size);
-    }
+//    // Print the created data for each process
+//     printf("\nRank %d:\n", rank);
+//     printf("Total Header Size: %lld\n", dummy.xsz);
+//     printf("Dimensions:\n");
+//     for (int i = 0; i < dummy.dims.ndefined; i++) {
+//         printf("  Name: %s, Size: %lld\n", dummy.dims.value[i]->name, dummy.dims.value[i]->size);
+//     }
 
-    printf("Variables:\n");
-    for (int i = 0; i < dummy.vars.ndefined; i++) {
-        printf("  Name: %s, Type: %d, NumDims: %d\n", dummy.vars.value[i]->name,  dummy.vars.value[i]->xtype, 
-        dummy.vars.value[i]->ndims);
-        printf("    Dim IDs: ");
-        for (int j = 0; j < dummy.vars.value[i]->ndims; j++) {
-            printf("%d ", dummy.vars.value[i]->dimids[j]);
-        }
-        printf("\n");
-        printf("    Attributes:\n");
-        for (int k = 0; k < dummy.vars.value[i]->attrs.ndefined; k++) {
-            printf("      Name: %s, Nelems: %lld, Type: %d\n", dummy.vars.value[i]->attrs.value[k]->name, 
-            dummy.vars.value[i]->attrs.value[k]->nelems, dummy.vars.value[i]->attrs.value[k]->xtype);
-        }
-    }
-    printf("rank %d, buffer size: %lld \n", rank, dummy.xsz);
+//     printf("Variables:\n");
+//     for (int i = 0; i < dummy.vars.ndefined; i++) {
+//         printf("  Name: %s, Type: %d, NumDims: %d\n", dummy.vars.value[i]->name,  dummy.vars.value[i]->xtype, 
+//         dummy.vars.value[i]->ndims);
+//         printf("    Dim IDs: ");
+//         for (int j = 0; j < dummy.vars.value[i]->ndims; j++) {
+//             printf("%d ", dummy.vars.value[i]->dimids[j]);
+//         }
+//         printf("\n");
+//         printf("    Attributes:\n");
+//         for (int k = 0; k < dummy.vars.value[i]->attrs.ndefined; k++) {
+//             printf("      Name: %s, Nelems: %lld, Type: %d\n", dummy.vars.value[i]->attrs.value[k]->name, 
+//             dummy.vars.value[i]->attrs.value[k]->nelems, dummy.vars.value[i]->attrs.value[k]->xtype);
+//         }
+//     }
+//     printf("rank %d, buffer size: %lld \n", rank, dummy.xsz);
     char* send_buffer = (char*) malloc(dummy.xsz);
     status = serialize_hdr(&dummy, send_buffer);
     // printf("rank %d, buffer: %s", rank, send_buffer);
@@ -261,7 +261,7 @@ int main(int argc, char *argv[]) {
     err = ncmpi_create(MPI_COMM_WORLD, filename, cmode, MPI_INFO_NULL, &ncid); ERR
     for (int i = 0; i < size; ++i) {
         struct hdr recv_hdr;
-        printf("rank %d, recv_displs: %d, recvcounts: %d \n",  rank, recv_displs[i], recvcounts[i]);
+        // printf("rank %d, recv_displs: %d, recvcounts: %d \n",  rank, recv_displs[i], recvcounts[i]);
         deserialize_hdr(&recv_hdr, all_collections_buffer + recv_displs[i], recvcounts[i]);
         define_hdr(&recv_hdr, ncid);
     }
