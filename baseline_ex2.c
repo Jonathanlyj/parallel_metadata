@@ -23,8 +23,8 @@ static int verbose;
 
 #define ERR {if(err!=NC_NOERR){printf("Error at %s:%d : %s\n", __FILE__,__LINE__, ncmpi_strerror(err));nerrs++;}}
 
-// #define FILE_NAME "nue_slice_graphs.0001.nc"
-#define FILE_NAME "testfile.nc"
+#define FILE_NAME "nue_slice_graphs.0001.nc"
+// #define FILE_NAME "testfile.nc"
 /* ---------------------------------- Read Metadata ----------------------------------------*/
 
 
@@ -59,6 +59,9 @@ void read_metdata(int rank, int size, struct hdr *file_info) {
     // Determine start and count based on rank
     start = rank * vars_per_process + (rank < remainder ? rank : remainder);
     count = vars_per_process + (rank < remainder ? 1 : 0);
+    if (rank == 0){
+        printf("\nNumber of variables per process: %d to %d\n", vars_per_process, vars_per_process + 1);
+    }
 
     file_info->vars.ndefined = count;
     file_info->vars.value = (hdr_var **)malloc(file_info->vars.ndefined * sizeof(hdr_var *));
@@ -223,7 +226,7 @@ int define_hdr(struct hdr *hdr_data, int ncid){
 int main(int argc, char *argv[]) {
     MPI_Init(&argc, &argv);
     int rank, size, status, err, nerrs=0;
-    double start_time, end_time1, end_time2;
+    double start_time1, end_time1, start_time2, end_time2;
     MPI_Comm_rank(MPI_COMM_WORLD, &rank);
     MPI_Comm_size(MPI_COMM_WORLD, &size);
     struct hdr dummy;
@@ -254,7 +257,7 @@ int main(int argc, char *argv[]) {
     //     }
     // }
     // printf("rank %d, buffer size: %lld \n", rank, dummy.xsz);
-    start_time = MPI_Wtime();
+    start_time1 = MPI_Wtime();
     char* send_buffer = (char*) malloc(dummy.xsz);
     status = serialize_hdr(&dummy, send_buffer);
     // printf("rank %d, buffer: %s", rank, send_buffer);
@@ -298,7 +301,7 @@ int main(int argc, char *argv[]) {
 
     // Deserialize the received data and print if rank is 0
     end_time1 = MPI_Wtime();
-    double mpi_time = end_time1 - start_time;
+    double mpi_time = end_time1 - start_time1;
 
     double mean_time, max_time, min_time;
     MPI_Reduce(&mpi_time, &mean_time, 1, MPI_DOUBLE, MPI_SUM, 0, MPI_COMM_WORLD);
@@ -315,8 +318,12 @@ int main(int argc, char *argv[]) {
 
     int ncid, cmode;
     char filename[256];
-    cmode = NC_64BIT_OFFSET| NC_CLOBBER;
-    strcpy(filename, "testfile1.nc");
+    cmode = NC_64BIT_DATA | NC_CLOBBER;
+    size_t position = strlen(FILE_NAME) - 3;
+    strncpy(filename, FILE_NAME, position);
+    strcat(filename, "_new");
+    strcat(filename, FILE_NAME + position);
+    start_time2 = MPI_Wtime();
     err = ncmpi_create(MPI_COMM_WORLD, filename, cmode, MPI_INFO_NULL, &ncid); ERR
     for (int i = 0; i < size; ++i) {
         struct hdr recv_hdr;
