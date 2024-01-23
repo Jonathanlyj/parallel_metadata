@@ -331,7 +331,7 @@ int main(int argc, char *argv[]) {
         deserialize_hdr(&recv_hdr, all_collections_buffer + recv_displs[i], recvcounts[i]);
         define_hdr(&recv_hdr, ncid);
     }
-
+    err = ncmpi_enddef(ncid); ERR
 
     // Clean up
     free(send_buffer);
