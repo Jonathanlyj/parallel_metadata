@@ -48,7 +48,7 @@ put_uint32(void **xpp, unsigned int ip)
 }
 
 static int
-serialize_dim(bufferinfo   *pbp,
+serialize_dim(metabuffer   *pbp,
                const hdr_dim *dimp)
 {
     /* copy name */
@@ -58,7 +58,7 @@ serialize_dim(bufferinfo   *pbp,
 }
 
 static int
-serialize_name(bufferinfo *pbp,
+serialize_name(metabuffer *pbp,
                 const char *name)
 {
     size_t nchars = strlen(name);
@@ -70,7 +70,7 @@ serialize_name(bufferinfo *pbp,
 
 
 static int
-serialize_dimarray(bufferinfo        *pbp,
+serialize_dimarray(metabuffer        *pbp,
                     const hdr_dimarray *ncap)
 {
     int i, status;
@@ -98,7 +98,7 @@ serialize_dimarray(bufferinfo        *pbp,
 }
 
 static int
-serialize_attrV(bufferinfo    *pbp,
+serialize_attrV(metabuffer    *pbp,
                  const hdr_attr *attrp)
 {
 
@@ -117,7 +117,7 @@ serialize_attrV(bufferinfo    *pbp,
 
 /*----< serialize_NC_attr() >--------------------------------------------------*/
 static int
-serialize_attr(bufferinfo    *pbp,
+serialize_attr(metabuffer    *pbp,
                 const hdr_attr *attrp)
 {
     int status;
@@ -142,7 +142,7 @@ serialize_attr(bufferinfo    *pbp,
 }
 
 static int
-serialize_attrarray(bufferinfo         *pbp,
+serialize_attrarray(metabuffer         *pbp,
                      const hdr_attrarray *ncap)
 {
 
@@ -171,7 +171,7 @@ serialize_attrarray(bufferinfo         *pbp,
 }
 
 static int
-serialize_var(bufferinfo   *pbp,
+serialize_var(metabuffer   *pbp,
                const hdr_var *varp)
 {
     int i, status;
@@ -207,7 +207,7 @@ serialize_var(bufferinfo   *pbp,
 
 /*----< serialize_vararray() >----------------------------------------------*/
 static int
-serialize_vararray(bufferinfo        *pbp,
+serialize_vararray(metabuffer        *pbp,
                     const hdr_vararray *ncap)
 {
     int i, status;
@@ -243,7 +243,7 @@ int
 serialize_hdr(struct hdr *ncp, void *buf)
 {
     int status;
-    bufferinfo putbuf;
+    metabuffer putbuf;
 
     putbuf.pos           = buf;
     putbuf.base          = buf;
@@ -296,7 +296,7 @@ get_uint32(void **xpp, unsigned int *ip)
     return NC_NOERR;
 }
 
-static int deserialize_nc_type(bufferinfo *gbp, nc_type *xtypep){
+static int deserialize_nc_type(metabuffer *gbp, nc_type *xtypep){
     int err;
     uint32_t xtype;
     err = get_uint32((void **)(&gbp->pos), &xtype);
@@ -305,7 +305,7 @@ static int deserialize_nc_type(bufferinfo *gbp, nc_type *xtypep){
     return NC_NOERR;
 }
 
-static int deserialize_name(bufferinfo *gbp, char **name) {
+static int deserialize_name(metabuffer *gbp, char **name) {
     unsigned int nchars;
     get_uint32((void**)&gbp->pos, &nchars);
     *name = (char *)malloc(nchars + 1);
@@ -317,7 +317,7 @@ static int deserialize_name(bufferinfo *gbp, char **name) {
     return NC_NOERR;
 }
 
-static int deserialize_dim(bufferinfo *gbp, hdr_dim *dimp) {
+static int deserialize_dim(metabuffer *gbp, hdr_dim *dimp) {
     MPI_Offset dim_length;
     uint32_t tmp;
     char *name;
@@ -332,7 +332,7 @@ static int deserialize_dim(bufferinfo *gbp, hdr_dim *dimp) {
     return 0;
 }
 
-static int deserialize_dimarray(bufferinfo *gbp, hdr_dimarray *ncap) {
+static int deserialize_dimarray(metabuffer *gbp, hdr_dimarray *ncap) {
     unsigned int tag;
     get_uint32((void**)&gbp->pos, &tag);
     if (tag == NC_UNSPECIFIED) {
@@ -363,7 +363,7 @@ static int deserialize_dimarray(bufferinfo *gbp, hdr_dimarray *ncap) {
     return 0;
 }
 
-static int deserialize_attrV(bufferinfo *gbp, hdr_attr *attrp) {
+static int deserialize_attrV(metabuffer *gbp, hdr_attr *attrp) {
     int xsz, sz, err;
 
     xlen_nc_type(attrp->xtype, &xsz);
@@ -381,7 +381,7 @@ static int deserialize_attrV(bufferinfo *gbp, hdr_attr *attrp) {
     return 0;
 }
 
-static int deserialize_attr(bufferinfo *gbp, hdr_attr *attrp) {
+static int deserialize_attr(metabuffer *gbp, hdr_attr *attrp) {
     uint32_t tmp;
     int err;
     char *name;
@@ -400,7 +400,7 @@ static int deserialize_attr(bufferinfo *gbp, hdr_attr *attrp) {
     return 0;
 }
 
-static int deserialize_attrarray(bufferinfo *gbp, hdr_attrarray *ncap) {
+static int deserialize_attrarray(metabuffer *gbp, hdr_attrarray *ncap) {
     unsigned int tag;
     get_uint32((void**)&gbp->pos, &tag);
     uint32_t tmp;
@@ -434,7 +434,7 @@ static int deserialize_attrarray(bufferinfo *gbp, hdr_attrarray *ncap) {
     return 0;
 }
 
-static int deserialize_var(bufferinfo *gbp, hdr_var *varp) {
+static int deserialize_var(metabuffer *gbp, hdr_var *varp) {
     int err;
     char *name;
     // if (deserialize_name(gbp, &varp->name) != 0) {
@@ -469,7 +469,7 @@ static int deserialize_var(bufferinfo *gbp, hdr_var *varp) {
     return 0;
 }
 
-static int deserialize_vararray(bufferinfo *gbp, hdr_vararray *ncap) {
+static int deserialize_vararray(metabuffer *gbp, hdr_vararray *ncap) {
     unsigned int tag;
     int err;
     uint32_t tmp;
@@ -507,7 +507,7 @@ static int deserialize_vararray(bufferinfo *gbp, hdr_vararray *ncap) {
 int deserialize_hdr(struct hdr *ncp, void *buf, int buf_size) {
 
     int status;
-    bufferinfo getbuf;
+    metabuffer getbuf;
 
     getbuf.pos           = buf;
     getbuf.base          = buf;

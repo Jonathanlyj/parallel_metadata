@@ -23,7 +23,8 @@ static int verbose;
 
 #define ERR {if(err!=NC_NOERR){printf("Error at %s:%d : %s\n", __FILE__,__LINE__, ncmpi_strerror(err));nerrs++;}}
 
-#define FILE_NAME "nue_slice_graphs.0001.nc"
+#define FILE_NAME "/files2/scratch/yll6162/parallel_metadata/script/nue_slice_panoptic_hdf_merged.nc"
+#define OUTPUT_NAME "out.nc"
 // #define FILE_NAME "testfile.nc"
 /* ---------------------------------- Read Metadata ----------------------------------------*/
 
@@ -176,7 +177,7 @@ void read_metdata(int rank, int size, struct hdr *file_info) {
     ncmpi_close(ncid);
 }
 
-/* ---------------------------------- Encode Metadata ----------------------------------------*/
+/* ---------------------------------- Decode Metadata ----------------------------------------*/
 int define_hdr(struct hdr *hdr_data, int ncid){
     //define dimensions
     int ndims= hdr_data->dims.ndefined;
@@ -184,12 +185,13 @@ int define_hdr(struct hdr *hdr_data, int ncid){
     int i,j,k,nerrs=0;
     int err;
 
-     for (i=0; i<ndims; i++){
-        err = ncmpi_inq_dimid(ncid, hdr_data->dims.value[i]->name, &dimid[i]);
-        if (err != NC_NOERR) {
+    for (i=0; i<ndims; i++){
+        // err = ncmpi_inq_dimid(ncid, hdr_data->dims.value[i]->name, &dimid[i]);
+        // if (err != NC_NOERR) {
         err = ncmpi_def_dim(ncid, hdr_data->dims.value[i]->name,  hdr_data->dims.value[i]->size, &dimid[i]); ERR
-        }
+        // }
     }
+
     //define variables
     int nvars = hdr_data->vars.ndefined;
     int *varid = (int *)malloc(nvars * sizeof(int));
@@ -257,6 +259,7 @@ int main(int argc, char *argv[]) {
     //     }
     // }
     // printf("rank %d, buffer size: %lld \n", rank, dummy.xsz);
+    MPI_Barrier(MPI_COMM_WORLD);
     start_time1 = MPI_Wtime();
     char* send_buffer = (char*) malloc(dummy.xsz);
     status = serialize_hdr(&dummy, send_buffer);
@@ -274,14 +277,29 @@ int main(int argc, char *argv[]) {
 
     // Calculate displacements for the second phase
     int* recv_displs = (int*) malloc(size * sizeof(int));
-    int total_recv_size = all_collection_sizes[0];
+    int total_recv_size, min_size, max_size;
+    total_recv_size = min_size = max_size = all_collection_sizes[0];
     recv_displs[0] = 0;
 
     
     for (int i = 1; i < size; ++i) {
         recv_displs[i] = recv_displs[i - 1] + all_collection_sizes[i - 1];
         total_recv_size += all_collection_sizes[i];
+        if(all_collection_sizes[i] > max_size){
+            max_size = all_collection_sizes[i];
+        }
+        if(all_collection_sizes[i] < min_size){
+            min_size = all_collection_sizes[i];
+        }
         
+    }
+    double total_recv_size_MB = total_recv_size / (1024.0 * 1024.0);
+    double min_size_MB = min_size / (1024.0 * 1024.0);
+    double max_size_MB = max_size / (1024.0 * 1024.0);
+    if(rank==0){
+        printf("\nTotal buffer size: %f MB", total_recv_size_MB);
+        printf("\nMax buffer size: %f MB", max_size_MB);
+        printf("\nMin buffer size: %f MB \n", min_size_MB);
     }
     
     // printf("\nrank %d, dummy xsz %lld", rank, dummy.xsz);
@@ -303,15 +321,12 @@ int main(int argc, char *argv[]) {
     end_time1 = MPI_Wtime();
     double mpi_time = end_time1 - start_time1;
 
-    double mean_time, max_time, min_time;
-    MPI_Reduce(&mpi_time, &mean_time, 1, MPI_DOUBLE, MPI_SUM, 0, MPI_COMM_WORLD);
+    double max_time, min_time;
+
     MPI_Reduce(&mpi_time, &max_time, 1, MPI_DOUBLE, MPI_MAX, 0, MPI_COMM_WORLD);
     MPI_Reduce(&mpi_time, &min_time, 1, MPI_DOUBLE, MPI_MIN, 0, MPI_COMM_WORLD);
 
     if (rank == 0) {
-        mean_time /= size;
-
-        printf("Mean mpitime: %f seconds\n", mean_time);
         printf("Max mpitime: %f seconds\n", max_time);
         printf("Min mpitime: %f seconds\n", min_time);
     }
@@ -319,19 +334,25 @@ int main(int argc, char *argv[]) {
     int ncid, cmode;
     char filename[256];
     cmode = NC_64BIT_DATA | NC_CLOBBER;
-    size_t position = strlen(FILE_NAME) - 3;
-    strncpy(filename, FILE_NAME, position);
-    strcat(filename, "_new");
-    strcat(filename, FILE_NAME + position);
+    // size_t position = strlen(FILE_NAME) - 3;
+    // strncpy(filename, FILE_NAME, position);
+    // strcat(filename, "_new");
+    // strcat(filename, FILE_NAME + position);
+    // if (rank==0) printf("\n%s\n", OUTPUT_NAME);
+
+    err = ncmpi_create(MPI_COMM_WORLD, OUTPUT_NAME, cmode, MPI_INFO_NULL, &ncid); ERR
+    MPI_Barrier(MPI_COMM_WORLD);
     start_time2 = MPI_Wtime();
-    err = ncmpi_create(MPI_COMM_WORLD, filename, cmode, MPI_INFO_NULL, &ncid); ERR
     for (int i = 0; i < size; ++i) {
         struct hdr recv_hdr;
         // printf("rank %d, recv_displs: %d, recvcounts: %d \n",  rank, recv_displs[i], recvcounts[i]);
         deserialize_hdr(&recv_hdr, all_collections_buffer + recv_displs[i], recvcounts[i]);
         define_hdr(&recv_hdr, ncid);
     }
+
     err = ncmpi_enddef(ncid); ERR
+    end_time2 = MPI_Wtime();
+    double io_time = end_time2 - start_time2;
 
     // Clean up
     free(send_buffer);
@@ -343,17 +364,11 @@ int main(int argc, char *argv[]) {
     // free(send_collection.dimension_names);
     // ... Also, free the arrays inside received_collection ...
     err = ncmpi_close(ncid); ERR
-    end_time2 = MPI_Wtime();
 
-    double io_time = end_time2 - end_time1;
-    MPI_Reduce(&io_time, &mean_time, 1, MPI_DOUBLE, MPI_SUM, 0, MPI_COMM_WORLD);
     MPI_Reduce(&io_time, &max_time, 1, MPI_DOUBLE, MPI_MAX, 0, MPI_COMM_WORLD);
     MPI_Reduce(&io_time, &min_time, 1, MPI_DOUBLE, MPI_MIN, 0, MPI_COMM_WORLD);
 
     if (rank == 0) {
-        mean_time /= size;
-
-        printf("Mean write time: %f seconds\n", mean_time);
         printf("Max write time: %f seconds\n", max_time);
         printf("Min write time: %f seconds\n", min_time);
     }

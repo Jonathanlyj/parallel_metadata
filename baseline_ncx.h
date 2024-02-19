@@ -67,27 +67,27 @@ struct hdr {
 
 
 
-typedef struct bufferinfo {
+typedef struct metabuffer {
     // MPI_Comm    comm;
     int         size;     /* allocated size of the buffer */
     char       *base;     /* beginning of read/write buffer */
     char       *pos;      /* current position in buffer */
     char       *end;      /* end position of buffer */
-} bufferinfo;
+} metabuffer;
 
 
 // Function prototypes
 int xlen_nc_type(nc_type xtype, int *size);
 static int putn_text(void **xpp, MPI_Offset nelems, const char *tp);
 static int put_uint32(void **xpp, unsigned int ip);
-static int serialize_dim(bufferinfo *pbp, const hdr_dim *dimp);
-static int serialize_name(bufferinfo *pbp, const char *name);
-static int serialize_dimarray(bufferinfo *pbp, const hdr_dimarray *ncap);
-static int serialize_attrV(bufferinfo *pbp, const hdr_attr *attrp);
-static int serialize_attr(bufferinfo *pbp, const hdr_attr *attrp);
-static int serialize_attrarray(bufferinfo *pbp, const hdr_attrarray *ncap);
-static int serialize_var(bufferinfo *pbp, const hdr_var *varp);
-static int serialize_vararray(bufferinfo *pbp, const hdr_vararray *ncap);
+static int serialize_dim(metabuffer *pbp, const hdr_dim *dimp);
+static int serialize_name(metabuffer *pbp, const char *name);
+static int serialize_dimarray(metabuffer *pbp, const hdr_dimarray *ncap);
+static int serialize_attrV(metabuffer *pbp, const hdr_attr *attrp);
+static int serialize_attr(metabuffer *pbp, const hdr_attr *attrp);
+static int serialize_attrarray(metabuffer *pbp, const hdr_attrarray *ncap);
+static int serialize_var(metabuffer *pbp, const hdr_var *varp);
+static int serialize_vararray(metabuffer *pbp, const hdr_vararray *ncap);
 int serialize_hdr(struct hdr *ncp, void *buf);
 
 
@@ -95,14 +95,14 @@ int serialize_hdr(struct hdr *ncp, void *buf);
 int deserialize_hdr(struct hdr *ncp, void *buf, int buf_size);
 static int getn_text(void **xpp, MPI_Offset nelems, char *tp);
 static int get_uint32(void **xpp, unsigned int *ip);
-static int deserialize_nc_type(bufferinfo *gbp, nc_type *xtypep);
-static int deserialize_name(bufferinfo *gbp, char **name);
-static int deserialize_dim(bufferinfo *gbp, hdr_dim *dimp);
-static int deserialize_dimarray(bufferinfo *gbp, hdr_dimarray *ncap);
-static int deserialize_attrV(bufferinfo *gbp, hdr_attr *attrp);
-static int deserialize_attr(bufferinfo *gbp, hdr_attr *attrp);
-static int deserialize_attrarray(bufferinfo *gbp, hdr_attrarray *ncap);
-static int deserialize_var(bufferinfo *gbp, hdr_var *varp);
-static int deserialize_vararray(bufferinfo *gbp, hdr_vararray *ncap);
+static int deserialize_nc_type(metabuffer *gbp, nc_type *xtypep);
+static int deserialize_name(metabuffer *gbp, char **name);
+static int deserialize_dim(metabuffer *gbp, hdr_dim *dimp);
+static int deserialize_dimarray(metabuffer *gbp, hdr_dimarray *ncap);
+static int deserialize_attrV(metabuffer *gbp, hdr_attr *attrp);
+static int deserialize_attr(metabuffer *gbp, hdr_attr *attrp);
+static int deserialize_attrarray(metabuffer *gbp, hdr_attrarray *ncap);
+static int deserialize_var(metabuffer *gbp, hdr_var *varp);
+static int deserialize_vararray(metabuffer *gbp, hdr_vararray *ncap);
 
 
