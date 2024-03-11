@@ -8,7 +8,6 @@ setenv LD_LIBRARY_PATH /path/to/pnetcdf/PnetCDF-install/lib
 
 make
 
-setenv LD_LIBRARY_PATH /path/to/pnetcdfPnetCDF-install/
 
 
 mpiexec -n {nproc} ./baseline_test
