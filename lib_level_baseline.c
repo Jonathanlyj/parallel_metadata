@@ -88,7 +88,7 @@ static int
 pnetcdf_io(MPI_Comm comm, char *filename, int cmode)
 {
     int i, j, rank, nprocs, err, nerrs=0;
-    int ncid, varid, dimid[2], buf[NY][NX];
+    int ncid, varid, dimid[2];
     char str_att[128];
     float float_att[100];
     MPI_Offset  global_ny, global_nx;
@@ -103,10 +103,10 @@ pnetcdf_io(MPI_Comm comm, char *filename, int cmode)
 
     /* the global array is NY * (NX * nprocs) */
     global_ny = NY;
-    global_nx = NX * nprocs;
-
-    for (i=0; i<NY; i++)
-        for (j=0; j<NX; j++)
+    global_nx = NX * (rank + 1);
+    int buf[global_ny][global_nx];
+    for (i=0; i<global_ny; i++)
+        for (j=0; j<global_nx; j++)
              buf[i][j] = rank;
 
     /* add a global attribute: a time stamp at rank 0 */
@@ -123,26 +123,30 @@ pnetcdf_io(MPI_Comm comm, char *filename, int cmode)
     char str_y[20];
     char str_x[20];
     char var_rank[20];
-    sprintf(str_y, "Y_rank_%d", rank);
+    // sprintf(str_y, "Y_rank_%d", rank);
+    sprintf(str_y, "Y_shared");
     sprintf(str_x, "X_rank_%d", rank);
-    err = ncmpi_def_dim(ncid, str_y, global_ny, &dimid[0]); ERR
+    // err = ncmpi_def_dim(ncid, str_y, global_ny, &dimid[0]); ERR
+    err = ncmpi_def_dim(ncid, str_y, NY, &dimid[0]); ERR
     err = ncmpi_def_dim(ncid, str_x, global_nx, &dimid[1]); ERR
+
 
     /* define a 2D variable of integer type */
     sprintf(var_rank, "var_rank_%d", rank);
+
     err = ncmpi_def_var(ncid, var_rank, NC_INT, 2, dimid, &varid); ERR
 
-    /* add attributes to the variable */
-    strcpy(str_att, "example attribute of type text.");
-    err = ncmpi_put_att_text(ncid, varid, "str_att_name", strlen(str_att),
-                             &str_att[0]); ERR
+    // /* add attributes to the variable */
+    // strcpy(str_att, "example attribute of type text.");
+    // err = ncmpi_put_att_text(ncid, varid, "str_att_name", strlen(str_att),
+    //                          &str_att[0]); ERR
 
-    for (i=0; i<8; i++) float_att[i] = i;
-    err = ncmpi_put_att_float(ncid, varid, "float_att_name", NC_FLOAT, 8,
-                              &float_att[0]); ERR
-    short short_att=1000;
-    err = ncmpi_put_att_short(ncid, varid, "short_att_name", NC_SHORT, 1,
-                              &short_att); ERR
+    // for (i=0; i<8; i++) float_att[i] = i;
+    // err = ncmpi_put_att_float(ncid, varid, "float_att_name", NC_FLOAT, 8,
+    //                           &float_att[0]); ERR
+    // short short_att=1000;
+    // err = ncmpi_put_att_short(ncid, varid, "short_att_name", NC_SHORT, 1,
+    //                           &short_att); ERRGot
    
         /* define a 2D variable of integer type */
         // err = ncmpi_def_var(ncid, "var1", NC_INT, 2, dimid, &varid); ERR
@@ -156,10 +160,11 @@ pnetcdf_io(MPI_Comm comm, char *filename, int cmode)
     // start[1] = NX * rank;
     // count[0] = NY;
     // count[1] = NX;
-    
+    err = ncmpi_put_var_int_all(ncid, varid,  &buf[0][0]); ERR
     // err = ncmpi_put_vara_int_all(ncid, varid, start, count, &buf[0][0]); ERR
     // printf("\n rank %d: after enddef", rank);
     err = ncmpi_close(ncid); ERR
+
     // printf("\n rank %d: after file close", rank);
     return nerrs;
 }

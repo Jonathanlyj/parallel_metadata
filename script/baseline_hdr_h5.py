@@ -4,6 +4,7 @@ import pickle
 import mpi4py.MPI as MPI
 import os
 num_vars = 0
+run_time_2 = 0
 def create_example_hdf5_file(file_path):
     with h5py.File(file_path, 'w', libver='latest', driver='mpio', comm=MPI.COMM_WORLD) as file:
         # Dataset with Datatype, Dataspace, and Fill Value
@@ -73,11 +74,16 @@ def store_metadata(instance, metadata):
     return
 
 def create_metadata(metadata, instance=None):
+    global run_time_2
+
     for key, info in metadata.items():
         if key.startswith('H5A_'):
             # Attribute
             attr_name = key[len('H5A_'):]
+            start_time_2 = MPI.Wtime()
             instance.attrs.create(attr_name, info['DAT'])
+            end_time_2 = MPI.Wtime()
+            run_time_2 += end_time_2 - start_time_2
 
         elif key.startswith('H5G_') or key.startswith('H5D_'):
             obj_name =  key[4:]
@@ -86,6 +92,7 @@ def create_metadata(metadata, instance=None):
                 dtype = info['DTYPE']
                 dataspace = info['DSPACE']
                 # dataset = instance.create_dataset(obj_name, shape = dataspace, dtype = dtype)
+                start_time_2 = MPI.Wtime()
                 plist = h5py.h5p.create(h5py.h5p.DATASET_CREATE)
                 plist.set_fill_time(h5py.h5d.FILL_TIME_NEVER)
                 # if len(dataspace) > 1:
@@ -99,9 +106,14 @@ def create_metadata(metadata, instance=None):
                 datasetid = h5py.h5d.create(grpid, obj_name_b, h5py_dtype, spaceid, plist)
                 dataset = h5py.Dataset(datasetid)
                 create_metadata(info, instance=dataset)
+                end_time_2 = MPI.Wtime()
+                run_time_2 += end_time_2 - start_time_2
             else:
                 # Group
+                start_time_2 = MPI.Wtime()
                 group = instance.create_group(obj_name)
+                end_time_2 = MPI.Wtime()
+                run_time_2 += end_time_2 - start_time_2
                 create_metadata(info, instance=group)
 
 def create_file_from_metadata(file_path, metadata, meta_block_size=None):
@@ -211,19 +223,20 @@ if __name__ == "__main__":
     if rank==0:
         print(f"Max comm time: {max_time}")
         print(f"Min comm time: {min_time}")
+        
 
     # ---------------------------------------------------- Create Metadata Collectively--------------------------------------------------
     output_file_path = f"{app_file_dir.split('/')[-1]}_merged.h5"
     comm.Barrier()
-    start_time_2 = MPI.Wtime()
+    # start_time_2 = MPI.Wtime()
     if meta_block_size:
         create_file_from_metadata(output_file_path, all_metadata, meta_block_size = meta_block_size * mb)
     else:
         create_file_from_metadata(output_file_path, all_metadata)
-    end_time_2 = MPI.Wtime()
-    crt_time = end_time_2 - start_time_2
-    min_time = comm.reduce(crt_time, op=MPI.MIN, root=0)
-    max_time = comm.reduce(crt_time, op=MPI.MAX, root=0)
+    # end_time_2 = MPI.Wtime()
+    # crt_time = end_time_2 - start_time_2
+    min_time = comm.reduce(run_time_2, op=MPI.MIN, root=0)
+    max_time = comm.reduce(run_time_2, op=MPI.MAX, root=0)
     if rank==0:
         print(f"Max create time: {max_time}")
         print(f"Min create time: {min_time}")

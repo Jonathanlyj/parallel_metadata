@@ -23,9 +23,44 @@ static int verbose;
 
 #define ERR {if(err!=NC_NOERR){printf("Error at %s:%d : %s\n", __FILE__,__LINE__, ncmpi_strerror(err));nerrs++;}}
 
-#define FILE_NAME "/files2/scratch/yll6162/parallel_metadata/script/nue_slice_panoptic_hdf_merged.nc"
+#define FILE_NAME "/files2/scratch/yll6162/parallel_metadata/nue_slice_panoptic_hdf_merged.nc"
+// #define FILE_NAME "/files2/scratch/yll6162/parallel_metadata/script/dummy_test.nc"
 #define OUTPUT_NAME "out.nc"
 // #define FILE_NAME "testfile.nc"
+
+
+/*----< pnetcdf_check_mem_usage() >------------------------------------------*/
+/* check PnetCDF library internal memory usage */
+static int
+pnetcdf_check_mem_usage(MPI_Comm comm)
+{
+    int err, nerrs=0, rank;
+    MPI_Offset malloc_size, sum_size;
+
+    MPI_Comm_rank(comm, &rank);
+
+    /* print info about PnetCDF internal malloc usage */
+    err = ncmpi_inq_malloc_max_size(&malloc_size);
+    if (err == NC_NOERR) {
+        MPI_Reduce(&malloc_size, &sum_size, 1, MPI_OFFSET, MPI_SUM, 0, MPI_COMM_WORLD);
+        if (rank == 0 && verbose)
+            printf("maximum heap memory allocated by PnetCDF internally is %lld bytes\n",
+                   sum_size);
+
+        /* check if there is any PnetCDF internal malloc residue */
+        err = ncmpi_inq_malloc_size(&malloc_size);
+        MPI_Reduce(&malloc_size, &sum_size, 1, MPI_OFFSET, MPI_SUM, 0, MPI_COMM_WORLD);
+        if (rank == 0 && sum_size > 0)
+            printf("heap memory allocated by PnetCDF internally has %lld bytes yet to be freed\n",
+                   sum_size);
+    }
+    else if (err != NC_ENOTENABLED) {
+        printf("Error at %s:%d: %s\n", __FILE__,__LINE__,ncmpi_strerror(err));
+        nerrs++;
+    }
+    return nerrs;
+}
+
 /* ---------------------------------- Read Metadata ----------------------------------------*/
 
 
@@ -56,13 +91,14 @@ void read_metdata(int rank, int size, struct hdr *file_info) {
     // Calculate equal distribution of variables among processes
     int vars_per_process = num_vars / size;
     int remainder = num_vars % size;
-
+    // int remainder = num_vars % 8;    
+    // int vars_per_process = num_vars / 8;
     // Determine start and count based on rank
     start = rank * vars_per_process + (rank < remainder ? rank : remainder);
     count = vars_per_process + (rank < remainder ? 1 : 0);
-    if (rank == 0){
-        printf("\nNumber of variables per process: %d to %d\n", vars_per_process, vars_per_process + 1);
-    }
+    // if (rank == 0){
+    //     printf("\nNumber of variables per process: %d to %d\n", vars_per_process, vars_per_process + 1);
+    // }
 
     file_info->vars.ndefined = count;
     file_info->vars.value = (hdr_var **)malloc(file_info->vars.ndefined * sizeof(hdr_var *));
@@ -178,7 +214,7 @@ void read_metdata(int rank, int size, struct hdr *file_info) {
 }
 
 /* ---------------------------------- Decode Metadata ----------------------------------------*/
-int define_hdr(struct hdr *hdr_data, int ncid){
+int define_hdr(struct hdr *hdr_data, int ncid, int rank){
     //define dimensions
     int ndims= hdr_data->dims.ndefined;
     int *dimid = (int *)malloc(ndims * sizeof(int));
@@ -188,6 +224,7 @@ int define_hdr(struct hdr *hdr_data, int ncid){
     for (i=0; i<ndims; i++){
         // err = ncmpi_inq_dimid(ncid, hdr_data->dims.value[i]->name, &dimid[i]);
         // if (err != NC_NOERR) {
+        // if (rank == 0) printf("\n %s", hdr_data->dims.value[i]->name);
         err = ncmpi_def_dim(ncid, hdr_data->dims.value[i]->name,  hdr_data->dims.value[i]->size, &dimid[i]); ERR
         // }
     }
@@ -232,7 +269,7 @@ int main(int argc, char *argv[]) {
     MPI_Comm_rank(MPI_COMM_WORLD, &rank);
     MPI_Comm_size(MPI_COMM_WORLD, &size);
     struct hdr dummy;
-    struct hdr recv_hdr;
+    // struct hdr recv_hdr;
     // create_dummy_data(rank, &dummy);
     read_metdata(rank, size, &dummy);
    // Print the created data for each process
@@ -296,11 +333,11 @@ int main(int argc, char *argv[]) {
     double total_recv_size_MB = total_recv_size / (1024.0 * 1024.0);
     double min_size_MB = min_size / (1024.0 * 1024.0);
     double max_size_MB = max_size / (1024.0 * 1024.0);
-    if(rank==0){
-        printf("\nTotal buffer size: %f MB", total_recv_size_MB);
-        printf("\nMax buffer size: %f MB", max_size_MB);
-        printf("\nMin buffer size: %f MB \n", min_size_MB);
-    }
+    // if(rank==0){
+    //     printf("\nTotal buffer size: %f MB", total_recv_size_MB);
+    //     printf("\nMax buffer size: %f MB", max_size_MB);
+    //     printf("\nMin buffer size: %f MB \n", min_size_MB);
+    // }
     
     // printf("\nrank %d, dummy xsz %lld", rank, dummy.xsz);
     // Allocate buffer for receiving all header data
@@ -326,10 +363,10 @@ int main(int argc, char *argv[]) {
     MPI_Reduce(&mpi_time, &max_time, 1, MPI_DOUBLE, MPI_MAX, 0, MPI_COMM_WORLD);
     MPI_Reduce(&mpi_time, &min_time, 1, MPI_DOUBLE, MPI_MIN, 0, MPI_COMM_WORLD);
 
-    if (rank == 0) {
-        printf("Max mpitime: %f seconds\n", max_time);
-        printf("Min mpitime: %f seconds\n", min_time);
-    }
+    // if (rank == 0) {
+    //     printf("Max mpitime: %f seconds\n", max_time);
+    //     printf("Min mpitime: %f seconds\n", min_time);
+    // }
 
     int ncid, cmode;
     char filename[256];
@@ -344,10 +381,11 @@ int main(int argc, char *argv[]) {
     MPI_Barrier(MPI_COMM_WORLD);
     start_time2 = MPI_Wtime();
     for (int i = 0; i < size; ++i) {
-        struct hdr recv_hdr;
+        struct hdr *recv_hdr = (struct hdr *)malloc(sizeof(struct hdr)); 
         // printf("rank %d, recv_displs: %d, recvcounts: %d \n",  rank, recv_displs[i], recvcounts[i]);
-        deserialize_hdr(&recv_hdr, all_collections_buffer + recv_displs[i], recvcounts[i]);
-        define_hdr(&recv_hdr, ncid);
+        deserialize_hdr(recv_hdr, all_collections_buffer + recv_displs[i], recvcounts[i]);
+        define_hdr(recv_hdr, ncid, rank);
+        free_hdr(recv_hdr);
     }
 
     err = ncmpi_enddef(ncid); ERR
@@ -368,10 +406,10 @@ int main(int argc, char *argv[]) {
     MPI_Reduce(&io_time, &max_time, 1, MPI_DOUBLE, MPI_MAX, 0, MPI_COMM_WORLD);
     MPI_Reduce(&io_time, &min_time, 1, MPI_DOUBLE, MPI_MIN, 0, MPI_COMM_WORLD);
 
-    if (rank == 0) {
-        printf("Max write time: %f seconds\n", max_time);
-        printf("Min write time: %f seconds\n", min_time);
-    }
+    // if (rank == 0) {
+    //     printf("Max write time: %f seconds\n", max_time);
+    //     printf("Min write time: %f seconds\n", min_time);
+    // }
     MPI_Finalize();
     return 0;
 

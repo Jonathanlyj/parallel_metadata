@@ -154,6 +154,7 @@ pnetcdf_io(MPI_Comm comm, char *filename, int cmode)
     err = ncmpi_def_dim(ncid, "Y", global_ny, &dimid[0]); ERR
     err = ncmpi_def_dim(ncid, "X", global_nx, &dimid[1]); ERR
 
+
     /* define a 2D variable of integer type */
     err = ncmpi_def_var(ncid, "var", NC_INT, 2, dimid, &varid); ERR
 

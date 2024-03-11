@@ -9,6 +9,7 @@ zero_dim_ct = 0
 dim_ct = 0
 var_ct = 0
 start_time_1 = 0
+# run_time_2 = 0
 def test_consistency_check(file_path, rank, comm):
 
     file = pnc.File(file_path, 'w', comm=comm,  format='64BIT_DATA')
@@ -38,12 +39,16 @@ def test_consistency_check(file_path, rank, comm):
 def create_metadata_nc(metadata, instance, parent_name=''):
     global zero_dim_ct
     global dim_ct
+    global run_time_2
     for key, info in metadata.items():
         # Create NetCDF dimensions based on HDF5 dataset shape
         if key.startswith('H5A_'):
             # Attribute
             attr_name = key[len('H5A_'):]
+            # start_time_2 = MPI.Wtime()
             instance.put_att(attr_name, info['DAT'])
+            # end_time_2 = MPI.Wtime()
+            # run_time_2 += end_time_2 - start_time_2
         elif key.startswith('H5G_') or key.startswith('H5D_'):
             
             obj_name =  key[4:]
@@ -53,18 +58,23 @@ def create_metadata_nc(metadata, instance, parent_name=''):
                 dtype = info['DTYPE']
                 dataspace = info['DSPACE']
                 dims = []
-                
+            
                 for i in range(len(dataspace)):
-                    
                     dim_ct += 1
                     dim_name = f'{item_name}_dim_{i}'
                     if dataspace[i] != 0:
+                        # start_time_2 = MPI.Wtime()
                         dim = instance.def_dim(dim_name, dataspace[i])
+                        # end_time_2 =  MPI.Wtime()
+                        # run_time_2 += end_time_2 - start_time_2
                         dims.append(dim)
                     else:
                         zero_dim_ct += 1
                 # Create NetCDF variables and copy data
+                # start_time_2 = MPI.Wtime()
                 ncvar = instance.def_var(item_name, dtype, dimensions=tuple(dims))
+                # end_time_2 =  MPI.Wtime()
+                # run_time_2 += end_time_2 - start_time_2
                 create_metadata_nc(info, ncvar,item_name)
             else:
             #group
@@ -108,11 +118,17 @@ def store_metadata(instance, metadata):
 
 def create_ncfile_from_metadata(file_path, metadata):
     global start_time_2
+    global run_time_2
+
     with pnc.File(file_path, 'w', comm=MPI.COMM_WORLD,  format='64BIT_DATA') as file:
         
         start_time_2 = MPI.Wtime()
         create_metadata_nc(metadata, instance=file)
+        # start_time_2 = MPI.Wtime()
         file.enddef()
+        # end_time_2 = MPI.Wtime()
+        # run_time_2 += end_time_2 - start_time_2
+
 
 
 def store_file_metadata(file_path):
@@ -154,7 +170,7 @@ def store_file_metadata_parallel(file_paths, rank, size):
 
 def exchange_metadata(metadata, rank, size):
     global var_ct
-    global start_time_2
+
     comm = MPI.COMM_WORLD
     # Serialize
     buffer = pickle.dumps(metadata)
@@ -200,36 +216,36 @@ if __name__ == "__main__":
     comm = MPI.COMM_WORLD
     rank = comm.Get_rank()
     size = comm.Get_size()
-    test_consistency_check(dummy_file_path, rank, comm)
+    # test_consistency_check(dummy_file_path, rank, comm)
     # ---------------------------------------------------- Read Metadata ----------------------------------------------------
     # create_example_hdf5_file(dummy_file_path)
-    # metadata = store_file_metadata_parallel(app_h5_files[:], rank, size)
+    metadata = store_file_metadata_parallel(app_h5_files[:], rank, size)
     
 
     # # ---------------------------------------------------- Exchange Metadata ------------------------------------------------
-    # comm.Barrier()
-    # start_time_1 = MPI.Wtime()
-    # all_metadata = exchange_metadata(metadata, rank, size)
-    # end_time_1 = MPI.Wtime()
-    # comm_time = end_time_1 - start_time_1
-    # min_time = comm.reduce(comm_time, op=MPI.MIN, root=0)
-    # max_time = comm.reduce(comm_time, op=MPI.MAX, root=0)
-    # if rank==0:
-    #     print(f"Max comm time: {max_time}")
-    #     print(f"Min comm time: {min_time}")
+    comm.Barrier()
+    start_time_1 = MPI.Wtime()
+    all_metadata = exchange_metadata(metadata, rank, size)
+    end_time_1 = MPI.Wtime()
+    comm_time = end_time_1 - start_time_1
+    min_time = comm.reduce(comm_time, op=MPI.MIN, root=0)
+    max_time = comm.reduce(comm_time, op=MPI.MAX, root=0)
+    if rank==0:
+        print(f"Max comm time: {max_time}")
+        print(f"Min comm time: {min_time}")
 
     # # ---------------------------------------------------- Create Metadata Collectively--------------------------------------------------
 
-    # output_file_path = f"{app_file_dir.split('/')[-1]}_merged.nc"
+    output_file_path = f"{app_file_dir.split('/')[-1]}_merged.nc"
 
-    # create_ncfile_from_metadata(output_file_path, all_metadata)
-    # end_time_2 = MPI.Wtime()
-    # crt_time = end_time_2 - start_time_2
-    # min_time = comm.reduce(crt_time, op=MPI.MIN, root=0)
-    # max_time = comm.reduce(crt_time, op=MPI.MAX, root=0)
-    # if rank==0:
-    #     print(f"Max create time: {max_time}")
-    #     print(f"Min create time: {min_time}")
-    #     print(f"total dim: {dim_ct}, process variable: {var_ct}")
+    create_ncfile_from_metadata(output_file_path, all_metadata)
+    end_time_2 = MPI.Wtime()
+    crt_time = end_time_2 - start_time_2
+    min_time = comm.reduce(crt_time, op=MPI.MIN, root=0)
+    max_time = comm.reduce(crt_time, op=MPI.MAX, root=0)
+    if rank==0:
+        print(f"Max create time: {max_time}")
+        print(f"Min create time: {min_time}")
+        print(f"total dim: {dim_ct}, process variable: {var_ct}")
 
 

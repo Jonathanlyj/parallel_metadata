@@ -4,16 +4,14 @@
 ```
 setenv PNETCDF_DIR /path/to/pnetcdf 
 
+setenv LD_LIBRARY_PATH /path/to/pnetcdf/PnetCDF-install/lib
+
 make
 
 setenv LD_LIBRARY_PATH /path/to/pnetcdfPnetCDF-install/
 
-e.g.
-setenv LD_LIBRARY_PATH /files2/scratch/PnetCDF-meta/PnetCDF-install/lib
 
-mpiexec -n {nproc} ./baseline_ex1
+mpiexec -n {nproc} ./baseline_test
 
-
-~/pnetcdf/PnetCDF-install/bin/ncmpidump lib_level_baseline.nc
 
 ```

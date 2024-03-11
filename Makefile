@@ -4,13 +4,15 @@ INCLUDES = -I$(PNETCDF_DIR)/include
 LFLAGS = -L$(PNETCDF_DIR)/lib
 LIBS = -lpnetcdf
 
-SRCS = baseline_ex1.c baseline_ncx.c baseline_ex2.c 
+SRCS = baseline_ex1.c baseline_ncx.c baseline_ex2.c baseline_test.c
 OBJS = $(SRCS:.c=.o)
 
 
 
-all: baseline_ex1 baseline_ex2 pnc_consist_check lib_level_baseline
+all: baseline_test baseline_ex1 baseline_ex2 pnc_consist_check lib_level_baseline
 
+baseline_test: baseline_test.o baseline_ncx.o
+	$(CC) $(CFLAGS) $(INCLUDES) $(LFLAGS) -o $@ $^ $(LIBS)
 baseline_ex1: baseline_ex1.o baseline_ncx.o
 	$(CC) $(CFLAGS) $(INCLUDES) $(LFLAGS) -o $@ $^ $(LIBS)
 
