@@ -377,20 +377,27 @@ int main(int argc, char *argv[]) {
     // strcat(filename, FILE_NAME + position);
     // if (rank==0) printf("\n%s\n", OUTPUT_NAME);
 
-    err = ncmpi_create(MPI_COMM_WORLD, OUTPUT_NAME, cmode, MPI_INFO_NULL, &ncid); ERR
+    MPI_Info info;
+    MPI_Info_create(&info);
+    MPI_Info_set(info, "nc_hash_size_dim", "1024");
+
+    err = ncmpi_create(MPI_COMM_WORLD, OUTPUT_NAME, cmode, info, &ncid); ERR
     MPI_Barrier(MPI_COMM_WORLD);
-    start_time2 = MPI_Wtime();
+    double io_time = 0;
+
     for (int i = 0; i < size; ++i) {
         struct hdr *recv_hdr = (struct hdr *)malloc(sizeof(struct hdr)); 
         // printf("rank %d, recv_displs: %d, recvcounts: %d \n",  rank, recv_displs[i], recvcounts[i]);
         deserialize_hdr(recv_hdr, all_collections_buffer + recv_displs[i], recvcounts[i]);
+        start_time2 = MPI_Wtime();
         define_hdr(recv_hdr, ncid, rank);
+        io_time += MPI_Wtime() - start_time2;
         free_hdr(recv_hdr);
     }
-
-    err = ncmpi_enddef(ncid); ERR
     end_time2 = MPI_Wtime();
-    double io_time = end_time2 - start_time2;
+    err = ncmpi_enddef(ncid); ERR
+    
+
 
     // Clean up
     free(send_buffer);
@@ -406,10 +413,10 @@ int main(int argc, char *argv[]) {
     MPI_Reduce(&io_time, &max_time, 1, MPI_DOUBLE, MPI_MAX, 0, MPI_COMM_WORLD);
     MPI_Reduce(&io_time, &min_time, 1, MPI_DOUBLE, MPI_MIN, 0, MPI_COMM_WORLD);
 
-    // if (rank == 0) {
-    //     printf("Max write time: %f seconds\n", max_time);
-    //     printf("Min write time: %f seconds\n", min_time);
-    // }
+    if (rank == 0) {
+        printf("Max write time: %f seconds\n", max_time);
+        printf("Min write time: %f seconds\n", min_time);
+    }
     MPI_Finalize();
     return 0;
 

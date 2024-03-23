@@ -104,10 +104,7 @@ pnetcdf_io(MPI_Comm comm, char *filename, int cmode)
     /* the global array is NY * (NX * nprocs) */
     global_ny = NY;
     global_nx = NX * (rank + 1);
-    int buf[global_ny][global_nx];
-    for (i=0; i<global_ny; i++)
-        for (j=0; j<global_nx; j++)
-             buf[i][j] = rank;
+
 
     /* add a global attribute: a time stamp at rank 0 */
     time_t ltime = time(NULL); /* get the current calendar time */
@@ -121,20 +118,58 @@ pnetcdf_io(MPI_Comm comm, char *filename, int cmode)
 
     /* define dimensions x and y */
     char str_y[20];
+    char shared_y[20];
+    char shared_x[20];
     char str_x[20];
     char var_rank[20];
-    // sprintf(str_y, "Y_rank_%d", rank);
-    sprintf(str_y, "Y_shared");
+    char shared_var[20];
+    sprintf(shared_y, "Y_shared");
+    sprintf(shared_x, "X_shared");
+    sprintf(str_y, "Y_rank_%d", rank);
     sprintf(str_x, "X_rank_%d", rank);
-    // err = ncmpi_def_dim(ncid, str_y, global_ny, &dimid[0]); ERR
-    err = ncmpi_def_dim(ncid, str_y, NY, &dimid[0]); ERR
-    err = ncmpi_def_dim(ncid, str_x, global_nx, &dimid[1]); ERR
+    if(rank <= 1){
+        err = ncmpi_def_dim(ncid, shared_y, NY, &dimid[0]); ERR
+        err = ncmpi_def_dim(ncid, shared_x, NX, &dimid[1]); ERR
+        int buf[NY/2][NX];
+        for (i=0; i<NY/2; i++)
+            for (j=0; j<NX; j++)
+                buf[i][j] = rank;
+        /* define a 2D variable of integer type */
+        sprintf(var_rank, "var_rank_%d", rank);
+        sprintf(shared_var, "shared_var", rank);
+
+        err = ncmpi_def_var(ncid, shared_var, NC_INT, 2, dimid, &varid); ERR
+
+        err = ncmpi_enddef(ncid); ERR
+        MPI_Offset start[2];
+        MPI_Offset count[2];
+        start[0] = NY/2 * rank;
+        start[1] = 0;
+        count[0] = NY/2;
+        count[1] = NX;
+        //rank 0 and 1 write to the same (shared) variable
+        err = ncmpi_put_vara_int_all(ncid, varid, start, count, &buf[0][0]); ERR
+
+    }else{
+        err = ncmpi_def_dim(ncid, str_y, NY, &dimid[0]); ERR
+        err = ncmpi_def_dim(ncid, str_x, global_nx, &dimid[1]); ERR
+        int buf[NY][global_nx];
+        for (i=0; i<NY; i++)
+            for (j=0; j<global_nx; j++)
+                buf[i][j] = rank;
+        sprintf(var_rank, "var_rank_%d", rank);
+        sprintf(shared_var, "shared_var", rank);
+        
+
+        err = ncmpi_def_var(ncid, var_rank, NC_INT, 2, dimid, &varid); ERR
+        err = ncmpi_enddef(ncid); ERR
 
 
-    /* define a 2D variable of integer type */
-    sprintf(var_rank, "var_rank_%d", rank);
+        err = ncmpi_put_var_int_all(ncid, varid,  &buf[0][0]); ERR
+    }
+    
 
-    err = ncmpi_def_var(ncid, var_rank, NC_INT, 2, dimid, &varid); ERR
+    
 
     // /* add attributes to the variable */
     // strcpy(str_att, "example attribute of type text.");
@@ -153,16 +188,12 @@ pnetcdf_io(MPI_Comm comm, char *filename, int cmode)
     // }
     // printf("\n rank %d: before file close", rank);
     /* do not forget to exit define mode */
-    err = ncmpi_enddef(ncid); ERR
+    
 
     // /* now we are in data mode */
-    // start[0] = 0;
-    // start[1] = NX * rank;
-    // count[0] = NY;
-    // count[1] = NX;
-    err = ncmpi_put_var_int_all(ncid, varid,  &buf[0][0]); ERR
-    // err = ncmpi_put_vara_int_all(ncid, varid, start, count, &buf[0][0]); ERR
-    // printf("\n rank %d: after enddef", rank);
+
+
+
     err = ncmpi_close(ncid); ERR
 
     // printf("\n rank %d: after file close", rank);
@@ -193,7 +224,7 @@ int main(int argc, char** argv)
                       MPI_Finalize();
                       return 1;
         }
-    if (argv[optind] == NULL) strcpy(filename, "lib_level_baseline.nc");
+    if (argv[optind] == NULL) strcpy(filename, "lib_level_baseline_test_shared.nc");
     else                      snprintf(filename, 256, "%s", argv[optind]);
 
     MPI_Bcast(filename, 256, MPI_CHAR, 0, MPI_COMM_WORLD);
