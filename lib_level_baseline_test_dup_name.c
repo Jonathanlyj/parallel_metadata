@@ -104,7 +104,10 @@ pnetcdf_io(MPI_Comm comm, char *filename, int cmode)
 
     }else{
         err = ncmpi_def_dim(ncid, str_y, NY, &dimid[0]); ERR
-        err = ncmpi_def_dim(ncid, str_x, global_nx, &dimid[1]); ERR
+
+        //err = ncmpi_def_dim(ncid, str_x, global_nx, &dimid[1]); ERR
+        //The following def dim violates the unique name rule (same name as the dim defined in rank0&1 but different property)
+        err = ncmpi_def_dim(ncid, shared_x, global_nx, &dimid[1]); ERR
         int buf[NY][global_nx];
         for (i=0; i<NY; i++)
             for (j=0; j<global_nx; j++)
@@ -176,7 +179,7 @@ int main(int argc, char** argv)
                       MPI_Finalize();
                       return 1;
         }
-    if (argv[optind] == NULL) strcpy(filename, "lib_level_baseline_test_shared.nc");
+    if (argv[optind] == NULL) strcpy(filename, "lib_level_baseline_test_dup_name.nc");
     else                      snprintf(filename, 256, "%s", argv[optind]);
 
     MPI_Bcast(filename, 256, MPI_CHAR, 0, MPI_COMM_WORLD);
