@@ -25,7 +25,7 @@ static int verbose;
 
 #define FILE_NAME "/files2/scratch/yll6162/parallel_metadata/nue_slice_panoptic_hdf_merged.nc"
 // #define FILE_NAME "/files2/scratch/yll6162/parallel_metadata/script/dummy_test.nc"
-#define OUTPUT_NAME "out.nc"
+#define OUTPUT_NAME "app_baseline_test_all.nc"
 // #define FILE_NAME "testfile.nc"
 
 
@@ -265,7 +265,7 @@ int define_hdr(struct hdr *hdr_data, int ncid, int rank){
 int main(int argc, char *argv[]) {
     MPI_Init(&argc, &argv);
     int rank, size, status, err, nerrs=0;
-    double start_time1, end_time1, start_time2, end_time2;
+    double start_time1, end_time1, start_time2, end_time2, end_time3;
     MPI_Comm_rank(MPI_COMM_WORLD, &rank);
     MPI_Comm_size(MPI_COMM_WORLD, &size);
     struct hdr dummy;
@@ -395,7 +395,12 @@ int main(int argc, char *argv[]) {
         free_hdr(recv_hdr);
     }
     end_time2 = MPI_Wtime();
+    MPI_Barrier(MPI_COMM_WORLD);
+    end_time3 = MPI_Wtime();
     err = ncmpi_enddef(ncid); ERR
+    double enddef_time = MPI_Wtime()- end_time3;
+    
+    
     
 
 
@@ -416,6 +421,14 @@ int main(int argc, char *argv[]) {
     if (rank == 0) {
         printf("Max write time: %f seconds\n", max_time);
         printf("Min write time: %f seconds\n", min_time);
+    }
+
+    MPI_Reduce(&enddef_time, &max_time, 1, MPI_DOUBLE, MPI_MAX, 0, MPI_COMM_WORLD);
+    MPI_Reduce(&enddef_time, &min_time, 1, MPI_DOUBLE, MPI_MIN, 0, MPI_COMM_WORLD);
+
+    if (rank == 0) {
+        printf("Max enddef time: %f seconds\n", max_time);
+        printf("Min enddef time: %f seconds\n", min_time);
     }
     MPI_Finalize();
     return 0;
