@@ -1,5 +1,6 @@
 CC = mpicc
-CFLAGS = -O0 -g 
+PNETCDF_DIR =  /global/homes/y/yll6162/pnetcdf-source/pnetcdf-install
+CFLAGS = -O0 -g
 INCLUDES = -I$(PNETCDF_DIR)/include
 LFLAGS = -L$(PNETCDF_DIR)/lib
 LIBS = -lpnetcdf

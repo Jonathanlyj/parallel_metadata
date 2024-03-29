@@ -23,7 +23,7 @@ static int verbose;
 
 #define ERR {if(err!=NC_NOERR){printf("Error at %s:%d : %s\n", __FILE__,__LINE__, ncmpi_strerror(err));nerrs++;}}
 
-#define FILE_NAME "/files2/scratch/yll6162/parallel_metadata/nue_slice_panoptic_hdf_merged.nc"
+#define FILE_NAME "/global/homes/y/yll6162/parallel_metadata/data/nue_slice_panoptic_hdf_merged.nc"
 // #define FILE_NAME "/files2/scratch/yll6162/parallel_metadata/script/dummy_test.nc"
 #define OUTPUT_NAME "app_baseline_test_all.nc"
 // #define FILE_NAME "testfile.nc"
@@ -296,21 +296,24 @@ int main(int argc, char *argv[]) {
     //     }
     // }
     // printf("rank %d, buffer size: %lld \n", rank, dummy.xsz);
-    MPI_Barrier(MPI_COMM_WORLD);
-    start_time1 = MPI_Wtime();
+;
     char* send_buffer = (char*) malloc(dummy.xsz);
     status = serialize_hdr(&dummy, send_buffer);
     // printf("rank %d, buffer: %s", rank, send_buffer);
 
+    double mpi_time = 0;
 
 
-
-    
+    MPI_Barrier(MPI_COMM_WORLD);
+    start_time1 = MPI_Wtime();
 
 
     // Phase 1: Communicate the sizes of the header structure for each process
     MPI_Offset* all_collection_sizes = (MPI_Offset*) malloc(size * sizeof(MPI_Offset));
     MPI_Allgather(&dummy.xsz, 1, MPI_OFFSET, all_collection_sizes, 1, MPI_OFFSET, MPI_COMM_WORLD);
+
+    end_time1 = MPI_Wtime();
+    mpi_time += end_time1 - start_time1;
 
     // Calculate displacements for the second phase
     int* recv_displs = (int*) malloc(size * sizeof(int));
@@ -349,24 +352,25 @@ int main(int argc, char *argv[]) {
         recvcounts[i] = (int)all_collection_sizes[i];
     }
     // Phase 2: Communicate the actual header data
+    MPI_Barrier(MPI_COMM_WORLD);
+    start_time1 = MPI_Wtime();
     // Before MPI_Allgatherv
     MPI_Allgatherv(send_buffer, dummy.xsz, MPI_BYTE, all_collections_buffer, recvcounts, recv_displs, MPI_BYTE, MPI_COMM_WORLD);
-
-
+    end_time1 = MPI_Wtime();
+    mpi_time += end_time1 - start_time1;
 
     // Deserialize the received data and print if rank is 0
-    end_time1 = MPI_Wtime();
-    double mpi_time = end_time1 - start_time1;
+
 
     double max_time, min_time;
 
     MPI_Reduce(&mpi_time, &max_time, 1, MPI_DOUBLE, MPI_MAX, 0, MPI_COMM_WORLD);
     MPI_Reduce(&mpi_time, &min_time, 1, MPI_DOUBLE, MPI_MIN, 0, MPI_COMM_WORLD);
 
-    // if (rank == 0) {
-    //     printf("Max mpitime: %f seconds\n", max_time);
-    //     printf("Min mpitime: %f seconds\n", min_time);
-    // }
+    if (rank == 0) {
+        printf("Max mpitime: %f seconds\n", max_time);
+        printf("Min mpitime: %f seconds\n", min_time);
+    }
 
     int ncid, cmode;
     char filename[256];
