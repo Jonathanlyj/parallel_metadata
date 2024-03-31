@@ -43,16 +43,9 @@ pnetcdf_check_mem_usage(MPI_Comm comm)
     err = ncmpi_inq_malloc_max_size(&malloc_size);
     if (err == NC_NOERR) {
         MPI_Reduce(&malloc_size, &sum_size, 1, MPI_OFFSET, MPI_SUM, 0, MPI_COMM_WORLD);
-        if (rank == 0 && verbose)
-            printf("maximum heap memory allocated by PnetCDF internally is %lld bytes\n",
-                   sum_size);
-
-        /* check if there is any PnetCDF internal malloc residue */
-        err = ncmpi_inq_malloc_size(&malloc_size);
-        MPI_Reduce(&malloc_size, &sum_size, 1, MPI_OFFSET, MPI_SUM, 0, MPI_COMM_WORLD);
-        if (rank == 0 && sum_size > 0)
-            printf("heap memory allocated by PnetCDF internally has %lld bytes yet to be freed\n",
-                   sum_size);
+        if (rank == 0)
+            printf("maximum heap memory allocated by PnetCDF internally is %lld bytes (%.2f MB)\n",
+                   sum_size, (float)sum_size /1048576);
     }
     else if (err != NC_ENOTENABLED) {
         printf("Error at %s:%d: %s\n", __FILE__,__LINE__,ncmpi_strerror(err));
@@ -430,6 +423,7 @@ int main(int argc, char *argv[]) {
         printf("Max enddef time: %f seconds\n", max_time);
         printf("Min enddef time: %f seconds\n", min_time);
     }
+    pnetcdf_check_mem_usage(MPI_COMM_WORLD);
     MPI_Finalize();
     return 0;
 
