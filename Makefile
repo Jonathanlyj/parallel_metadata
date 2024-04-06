@@ -22,13 +22,13 @@ app_baseline_test_all: app_baseline_test_all.o baseline_ncx.o
 pnc_consist_check: pnc_consist_check.o 
 	$(CC) $(CFLAGS) $(INCLUDES) $(LFLAGS) -o $@ $^ $(LIBS)
 
-lib_level_baseline_test_shared: lib_level_baseline_test_shared.o baseline_ncx.o
+lib_level_baseline_test_shared: lib_level_baseline_test_shared.o
 	$(CC) $(CFLAGS) $(INCLUDES) $(LFLAGS) -o $@ $^ $(LIBS)
 
-lib_level_baseline_test_read: lib_level_baseline_test_read.o baseline_ncx.o
+lib_level_baseline_test_read: lib_level_baseline_test_read.o 
 	$(CC) $(CFLAGS) $(INCLUDES) $(LFLAGS) -o $@ $^ $(LIBS)
 
-lib_level_baseline_test_dup_name: lib_level_baseline_test_dup_name.o baseline_ncx.o
+lib_level_baseline_test_dup_name: lib_level_baseline_test_dup_name.o
 	$(CC) $(CFLAGS) $(INCLUDES) $(LFLAGS) -o $@ $^ $(LIBS)
 
 lib_baseline_test_all: lib_baseline_test_all.o baseline_ncx.o
