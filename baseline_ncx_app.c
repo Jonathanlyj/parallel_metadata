@@ -6,7 +6,7 @@
 #include <assert.h>
 #include <mpi.h>
 #include <pnetcdf.h>
-#include "baseline_ncx.h" 
+#include "baseline_ncx_app.h" 
 
 
   /* ---------------------------------- Serializaition ----------------------------------------*/

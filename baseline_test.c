@@ -14,7 +14,7 @@
 #include <time.h>   /* time() localtime(), asctime() */
 #include <mpi.h>
 #include <pnetcdf.h>
-#include "baseline_ncx.h" 
+#include "baseline_ncx_app.h" 
 
 
 
