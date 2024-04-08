@@ -14,7 +14,7 @@
 #include <time.h>   /* time() localtime(), asctime() */
 #include <mpi.h>
 #include <pnetcdf.h>
-#include "baseline_ncx.h" 
+#include "baseline_ncx_app.h" 
 
 
 
@@ -372,9 +372,10 @@ int main(int argc, char *argv[]) {
 
     MPI_Info info;
     MPI_Info_create(&info);
-    MPI_Info_set(info, "nc_hash_size_dim", "1024");
+    // MPI_Info_set(info, "nc_hash_size_dim", "1024");
 
-    err = ncmpi_create(MPI_COMM_WORLD, OUTPUT_NAME, cmode, info, &ncid); ERR
+    // err = ncmpi_create(MPI_COMM_WORLD, OUTPUT_NAME, cmode, info, &ncid); ERR
+    err = ncmpi_create(MPI_COMM_WORLD, OUTPUT_NAME, cmode, MPI_INFO_NULL, &ncid); ERR
     MPI_Barrier(MPI_COMM_WORLD);
     double io_time = 0;
 

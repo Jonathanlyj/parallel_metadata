@@ -64,6 +64,7 @@ baseline_dim
 
 # Files
 *.nc
+!lib_level_baseline_old.nc
 *.h5
 #core dumped
 core.*
