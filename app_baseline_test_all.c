@@ -28,7 +28,7 @@ static int verbose;
 #define OUTPUT_NAME "app_baseline_test_all.nc"
 // #define FILE_NAME "testfile.nc"
 
-
+double def_start_time, total_def_time=0;
 /*----< pnetcdf_check_mem_usage() >------------------------------------------*/
 /* check PnetCDF library internal memory usage */
 static int
@@ -218,7 +218,9 @@ int define_hdr(struct hdr *hdr_data, int ncid, int rank){
         // err = ncmpi_inq_dimid(ncid, hdr_data->dims.value[i]->name, &dimid[i]);
         // if (err != NC_NOERR) {
         // if (rank == 0) printf("\n %s", hdr_data->dims.value[i]->name);
+        def_start_time = MPI_Wtime();
         err = ncmpi_def_dim(ncid, hdr_data->dims.value[i]->name,  hdr_data->dims.value[i]->size, &dimid[i]); ERR
+        total_def_time += MPI_Wtime() - def_start_time;
         // }
     }
 
@@ -237,7 +239,9 @@ int define_hdr(struct hdr *hdr_data, int ncid, int rank){
         v_ndims = hdr_data->vars.value[i]->ndims;
         v_dimids = (int *)malloc(v_ndims * sizeof(int));
         for(j=0; j<v_ndims; j++) v_dimids[j] = dimid[hdr_data->vars.value[i]->dimids[j]];
+        def_start_time = MPI_Wtime();
         err = ncmpi_def_var(ncid, hdr_data->vars.value[i]->name, xtype, v_ndims,  v_dimids, &varid[i]); ERR
+        total_def_time += MPI_Wtime() - def_start_time;
         n_att = hdr_data->vars.value[i]->attrs.ndefined;
         // printf("\nn_att: %d\n", n_att);
         for(k=0; k<n_att; k++){
@@ -258,7 +262,8 @@ int define_hdr(struct hdr *hdr_data, int ncid, int rank){
 int main(int argc, char *argv[]) {
     MPI_Init(&argc, &argv);
     int rank, size, status, err, nerrs=0;
-    double start_time1, end_time1, start_time2, end_time2, end_time3;
+    double end_to_end_time, mpi_time, io_time, enddef_time, close_time, max_time, min_time;
+    double start_time, start_time1, end_time1, end_time2, end_time3, end_time;
     MPI_Comm_rank(MPI_COMM_WORLD, &rank);
     MPI_Comm_size(MPI_COMM_WORLD, &size);
     struct hdr dummy;
@@ -290,7 +295,7 @@ int main(int argc, char *argv[]) {
     // }
     // printf("rank %d, buffer size: %lld \n", rank, dummy.xsz);
     MPI_Barrier(MPI_COMM_WORLD);
-    start_time1 = MPI_Wtime();
+    start_time = start_time1 = MPI_Wtime();
     char* send_buffer = (char*) malloc(dummy.xsz);
     status = serialize_hdr(&dummy, send_buffer);
     // printf("rank %d, buffer: %s", rank, send_buffer);
@@ -349,17 +354,11 @@ int main(int argc, char *argv[]) {
 
     // Deserialize the received data and print if rank is 0
     end_time1 = MPI_Wtime();
-    double mpi_time = end_time1 - start_time1;
 
-    double max_time, min_time;
 
-    MPI_Reduce(&mpi_time, &max_time, 1, MPI_DOUBLE, MPI_MAX, 0, MPI_COMM_WORLD);
-    MPI_Reduce(&mpi_time, &min_time, 1, MPI_DOUBLE, MPI_MIN, 0, MPI_COMM_WORLD);
+    
 
-    // if (rank == 0) {
-    //     printf("Max mpitime: %f seconds\n", max_time);
-    //     printf("Min mpitime: %f seconds\n", min_time);
-    // }
+
 
     int ncid, cmode;
     char filename[256];
@@ -370,29 +369,22 @@ int main(int argc, char *argv[]) {
     // strcat(filename, FILE_NAME + position);
     // if (rank==0) printf("\n%s\n", OUTPUT_NAME);
 
-    MPI_Info info;
-    MPI_Info_create(&info);
-    // MPI_Info_set(info, "nc_hash_size_dim", "1024");
-
-    // err = ncmpi_create(MPI_COMM_WORLD, OUTPUT_NAME, cmode, info, &ncid); ERR
     err = ncmpi_create(MPI_COMM_WORLD, OUTPUT_NAME, cmode, MPI_INFO_NULL, &ncid); ERR
-    MPI_Barrier(MPI_COMM_WORLD);
-    double io_time = 0;
+
 
     for (int i = 0; i < size; ++i) {
         struct hdr *recv_hdr = (struct hdr *)malloc(sizeof(struct hdr)); 
         // printf("rank %d, recv_displs: %d, recvcounts: %d \n",  rank, recv_displs[i], recvcounts[i]);
         deserialize_hdr(recv_hdr, all_collections_buffer + recv_displs[i], recvcounts[i]);
-        start_time2 = MPI_Wtime();
+        
         define_hdr(recv_hdr, ncid, rank);
-        io_time += MPI_Wtime() - start_time2;
         free_hdr(recv_hdr);
     }
+    io_time = MPI_Wtime() - end_time1;
     end_time2 = MPI_Wtime();
-    MPI_Barrier(MPI_COMM_WORLD);
-    end_time3 = MPI_Wtime();
     err = ncmpi_enddef(ncid); ERR
-    double enddef_time = MPI_Wtime()- end_time3;
+    end_time3 = MPI_Wtime();
+    enddef_time = end_time3 - end_time2;
     
     
     
@@ -407,10 +399,29 @@ int main(int argc, char *argv[]) {
     // free(send_collection.name_lengths);
     // free(send_collection.dimension_names);
     // ... Also, free the arrays inside received_collection ...
-    err = ncmpi_close(ncid); ERR
 
+    err = ncmpi_close(ncid); ERR
+    end_time = MPI_Wtime();
+    close_time = end_time - end_time3;
+    end_to_end_time = end_time - start_time;
+
+    MPI_Reduce(&end_to_end_time, &max_time, 1, MPI_DOUBLE, MPI_MAX, 0, MPI_COMM_WORLD);
+    MPI_Reduce(&end_to_end_time, &min_time, 1, MPI_DOUBLE, MPI_MIN, 0, MPI_COMM_WORLD);
+
+    if (rank == 0) {
+        printf("Max end-end time: %f seconds\n", max_time);
+        printf("Min end-end time: %f seconds\n", min_time);
+    }
+    mpi_time = end_time1 - start_time1;
+    MPI_Reduce(&mpi_time, &max_time, 1, MPI_DOUBLE, MPI_MAX, 0, MPI_COMM_WORLD);
+    MPI_Reduce(&mpi_time, &min_time, 1, MPI_DOUBLE, MPI_MIN, 0, MPI_COMM_WORLD);
+    if (rank == 0) {
+        printf("Max mpi-phase time: %f seconds\n", max_time);
+        printf("Min mpi-phase time: %f seconds\n", min_time);
+    }
     MPI_Reduce(&io_time, &max_time, 1, MPI_DOUBLE, MPI_MAX, 0, MPI_COMM_WORLD);
     MPI_Reduce(&io_time, &min_time, 1, MPI_DOUBLE, MPI_MIN, 0, MPI_COMM_WORLD);
+   
 
     if (rank == 0) {
         printf("Max write time: %f seconds\n", max_time);
@@ -424,6 +435,23 @@ int main(int argc, char *argv[]) {
         printf("Max enddef time: %f seconds\n", max_time);
         printf("Min enddef time: %f seconds\n", min_time);
     }
+
+    MPI_Reduce(&total_def_time, &max_time, 1, MPI_DOUBLE, MPI_MAX, 0, MPI_COMM_WORLD);
+    MPI_Reduce(&total_def_time, &min_time, 1, MPI_DOUBLE, MPI_MIN, 0, MPI_COMM_WORLD);
+
+    if (rank == 0) {
+        printf("Max def_dim/var time: %f seconds\n", max_time);
+        printf("Min def_dim/var time: %f seconds\n", min_time);
+    }
+    
+    MPI_Reduce(&close_time, &max_time, 1, MPI_DOUBLE, MPI_MAX, 0, MPI_COMM_WORLD);
+    MPI_Reduce(&close_time, &min_time, 1, MPI_DOUBLE, MPI_MIN, 0, MPI_COMM_WORLD);
+
+    if (rank == 0) {
+        printf("Max close time: %f seconds\n", max_time);
+        printf("Min close time: %f seconds\n", min_time);
+    }
+
     pnetcdf_check_mem_usage(MPI_COMM_WORLD);
     MPI_Finalize();
     return 0;
