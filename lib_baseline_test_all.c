@@ -275,11 +275,12 @@ int main(int argc, char *argv[]) {
     // strcat(filename, SOURCE_NAME + position);
     // if (rank==0) printf("\n%s\n", OUTPUT_NAME);
 
-    // MPI_Info info;
-    // MPI_Info_create(&info);
-    // MPI_Info_set(info, "nc_hash_size_dim", "1024");
+    MPI_Info info;
+    MPI_Info_create(&info);
+    MPI_Info_set(info, "nc_hash_size_dim", "2048");
+    MPI_Info_set(info, "nc_hash_size_var", "2048");
 
-    err = ncmpi_create(MPI_COMM_WORLD, OUTPUT_NAME, cmode, MPI_INFO_NULL, &ncid); ERR
+    err = ncmpi_create(MPI_COMM_WORLD, OUTPUT_NAME, cmode, info, &ncid); ERR
     MPI_Barrier(MPI_COMM_WORLD);
     double io_time = 0;
     // printf("rank %d, recv_displs: %d, recvcounts: %d \n",  rank, recv_displs[i], recvcounts[i]);

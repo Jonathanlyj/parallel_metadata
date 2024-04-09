@@ -1,6 +1,6 @@
 CC = cc
 PNETCDF_DIR =  /global/homes/y/yll6162/pnetcdf-source/pnetcdf-install
-CFLAGS = -O0 -g
+CFLAGS = -O2
 INCLUDES = -I$(PNETCDF_DIR)/include
 LFLAGS = -L$(PNETCDF_DIR)/lib
 LIBS = -lpnetcdf
@@ -38,7 +38,7 @@ lib_baseline_test_all: lib_baseline_test_all.o baseline_ncx_lib.o
 %.o: %.c
 	$(CC) $(CFLAGS) $(INCLUDES) -c $< -o $@
 copy:
-    cp ./lib_level_baseline_old.nc ./lib_level_baseline.nc
+	cp ./lib_level_baseline_old.nc ./lib_level_baseline.nc
 clean:
 	rm -f $(OBJS)baseline_ex1 app_baseline_test_all pnc_consist_check lib_level_baseline_test_shared lib_level_baseline_test_read lib_level_baseline_test_dup_name lib_baseline_test_all ./lib_level_baseline.nc
 

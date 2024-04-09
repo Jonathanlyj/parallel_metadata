@@ -592,7 +592,7 @@ void free_hdr(struct hdr *header) {
         free_hdr_dimarray(&(header->dims));
         // free_hdr_attrarray(&(header->attrs));
         free_hdr_vararray(&(header->vars));
-        // free(header);
+        free(header);
     }
 }
 
