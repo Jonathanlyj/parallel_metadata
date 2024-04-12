@@ -388,7 +388,7 @@ int main(int argc, char *argv[]) {
     free(all_collections_buffer);
     free(all_collection_sizes);
     free(recv_displs);
-
+    MPI_Barrier(MPI_COMM_WORLD);
     end_time3 = MPI_Wtime();
     err = ncmpi_close(ncid); ERR
     end_time = MPI_Wtime();
