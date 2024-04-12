@@ -354,7 +354,7 @@ int main(int argc, char *argv[]) {
     // Before MPI_Allgatherv
     MPI_Allgatherv(send_buffer, dummy.xsz, MPI_BYTE, all_collections_buffer, recvcounts, recv_displs, MPI_BYTE, MPI_COMM_WORLD);
     // Deserialize the received data and print if rank is 0
-    end_time1 = MPI_Wtime();
+    
     int ncid, cmode;
     char filename[256];
     cmode = NC_64BIT_DATA | NC_CLOBBER;
@@ -365,7 +365,10 @@ int main(int argc, char *argv[]) {
     // if (rank==0) printf("\n%s\n", OUTPUT_NAME);
     struct hdr **all_recv_hdr = (struct hdr **)malloc(nproc * sizeof(struct hdr*));
     deserialize_all_hdr(all_recv_hdr, all_collections_buffer, recv_displs, recvcounts, nproc);
+
     err = ncmpi_create(MPI_COMM_WORLD, OUTPUT_NAME, cmode, MPI_INFO_NULL, &ncid); ERR
+    MPI_Barrier(MPI_COMM_WORLD);
+    end_time1 = MPI_Wtime();
     define_all_hdr(all_recv_hdr, nproc, ncid);
     // for (int i = 0; i < nproc; ++i) {
     //     struct hdr *recv_hdr = (struct hdr *)malloc(sizeof(struct hdr)); 
@@ -373,8 +376,8 @@ int main(int argc, char *argv[]) {
     //     define_hdr(recv_hdr, ncid, rank);
     //     free_hdr(recv_hdr);
     // }
-    free_all_hdr(all_recv_hdr, nproc);
     io_time = MPI_Wtime() - end_time1;
+    free_all_hdr(all_recv_hdr, nproc);
     end_time2 = MPI_Wtime();
     err = ncmpi_enddef(ncid); ERR
     end_time3 = MPI_Wtime();
