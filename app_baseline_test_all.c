@@ -191,7 +191,6 @@ void read_metdata(int rank, int size, struct hdr *file_info) {
         }
 
         // Add the variable information to the file_info structure
-
         file_info->vars.value[i - start] = variable_info;
     }
 
