@@ -68,5 +68,5 @@ baseline_dim
 *.h5
 #core dumped
 core.*
-
+qout.*
 **/env/*
