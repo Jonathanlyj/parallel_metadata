@@ -1,5 +1,6 @@
 # PNETCDF_DIR=/files2/scratch/yll6162/PnetCDF-test/PnetCDF-install/
-PNETCDF_DIR=/files2/scratch/yll6162/PnetCDF/1.13.0
+# PNETCDF_DIR=/files2/scratch/yll6162/pnetcdf/PnetCDF-install
+PNETCDF_DIR=/files2/scratch/yll6162/PnetCDF-meta/PnetCDF-install
 CC = mpicc
 CFLAGS = -O0 -g -I$(PNETCDF_DIR)/include 
 INCLUDES = -I$(PNETCDF_DIR)/include

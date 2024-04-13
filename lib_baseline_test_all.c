@@ -27,7 +27,8 @@ static int verbose;
 // #define SOURCE_NAME "/files2/scratch/yll6162/parallel_metadata/script/dummy_test.nc"
 #define OUTPUT_NAME "lib_baseline_test_all.nc"
 
-
+double def_start_time;
+double total_def_time = 0;
 
 /*----< pnetcdf_check_mem_usage() >------------------------------------------*/
 /* check PnetCDF library internal memory usage */
@@ -186,14 +187,14 @@ void read_metdata(int rank, int size, struct hdr *file_info) {
             // Allocate memory for attribute value and read it
             variable_info->attrs.value[j]->xtype = attr_type;
             variable_info->attrs.value[j]->nelems = attr_size;
-            xlen_nc_type(attr_type, &elem_sz);
+            meta_xlen_nc_type(attr_type, &elem_sz);
             variable_info->attrs.value[j]->xvalue = malloc(attr_size * elem_sz);
             ncmpi_get_att(ncid, i, variable_info->attrs.value[j]->name, variable_info->attrs.value[j]->xvalue);
 
             file_info->xsz += sizeof(uint32_t) + sizeof(char) * variable_info->attrs.value[j]->name_len; //attr name
             file_info->xsz += sizeof(uint32_t); // nc_type
             file_info->xsz += sizeof(uint32_t); // nelems
-            status = xlen_nc_type(variable_info->attrs.value[j]->xtype, &v_attrV_xsz);
+            status = meta_xlen_nc_type(variable_info->attrs.value[j]->xtype, &v_attrV_xsz);
             file_info->xsz += variable_info->attrs.value[j]->nelems * v_attrV_xsz; // attr_value
         }
 
@@ -206,7 +207,7 @@ void read_metdata(int rank, int size, struct hdr *file_info) {
     ncmpi_close(ncid);
 }
 
-/* ---------------------------------- Define Metadata ----------------------------------------*/
+/* ---------------------------------- Decode Metadata ----------------------------------------*/
 int define_hdr(struct hdr *hdr_data, int ncid, int rank){
     //define dimensions
     int ndims= hdr_data->dims.ndefined;
@@ -215,13 +216,11 @@ int define_hdr(struct hdr *hdr_data, int ncid, int rank){
     int err;
 
     for (i=0; i<ndims; i++){
-        // err = ncmpi_inq_dimid(ncid, hdr_data->dims.value[i]->name, &dimid[i]);
-        // if (err != NC_NOERR) {
-        // if (rank == 0) printf("\n %s", hdr_data->dims.value[i]->name);
+        def_start_time = MPI_Wtime();
         err = ncmpi_def_dim(ncid, hdr_data->dims.value[i]->name,  hdr_data->dims.value[i]->size, &dimid[i]); ERR
+        total_def_time += MPI_Wtime() - def_start_time;
         // }
     }
-    
     //define variables
     int nvars = hdr_data->vars.ndefined;
     int *varid = (int *)malloc(nvars * sizeof(int));
@@ -230,13 +229,16 @@ int define_hdr(struct hdr *hdr_data, int ncid, int rank){
     int att_namelen, att_xtype, att_nelems;
 
     for (i=0; i<nvars; i++){
-        v_namelen = hdr_data->vars.value[i]->name_len;
+
+        v_namelen =  hdr_data->vars.value[i]->name_len;
         xtype = hdr_data->vars.value[i]->xtype;
 
         v_ndims = hdr_data->vars.value[i]->ndims;
         v_dimids = (int *)malloc(v_ndims * sizeof(int));
         for(j=0; j<v_ndims; j++) v_dimids[j] = dimid[hdr_data->vars.value[i]->dimids[j]];
+        def_start_time = MPI_Wtime();
         err = ncmpi_def_var(ncid, hdr_data->vars.value[i]->name, xtype, v_ndims,  v_dimids, &varid[i]); ERR
+        total_def_time += MPI_Wtime() - def_start_time;
         n_att = hdr_data->vars.value[i]->attrs.ndefined;
         // printf("\nn_att: %d\n", n_att);
         for(k=0; k<n_att; k++){
@@ -246,17 +248,18 @@ int define_hdr(struct hdr *hdr_data, int ncid, int rank){
             err = ncmpi_put_att(ncid, varid[i],  hdr_data->vars.value[i]->attrs.value[k]->name, att_xtype, 
             att_nelems, &hdr_data->vars.value[i]->attrs.value[k]->xvalue[0]); ERR
         }
+
     }
     return nerrs;
 }
 
 
 
-
 int main(int argc, char *argv[]) {
     MPI_Init(&argc, &argv);
     int rank, size, status, err, nerrs=0;
-    double start_time1, end_time1, start_time2, end_time2, start_time3, max_time, min_time;
+    double end_time, start_time, start_time1, end_time1, start_time2, start_time3, max_time, min_time;
+    double io_time, enddef_time, close_time, end_to_end_time;
     MPI_Comm_rank(MPI_COMM_WORLD, &rank);
     MPI_Comm_size(MPI_COMM_WORLD, &size);
     struct hdr local_hdr;
@@ -264,7 +267,7 @@ int main(int argc, char *argv[]) {
     // create_dummy_data(rank, &dummy);
     read_metdata(rank, size, &local_hdr);
 
- 
+    
 
     int ncid, cmode;
     char filename[256];
@@ -274,50 +277,45 @@ int main(int argc, char *argv[]) {
     // strcat(filename, "_new");
     // strcat(filename, SOURCE_NAME + position);
     // if (rank==0) printf("\n%s\n", OUTPUT_NAME);
-
-    MPI_Info info;
-    MPI_Info_create(&info);
-    MPI_Info_set(info, "nc_hash_size_dim", "2048");
-    MPI_Info_set(info, "nc_hash_size_var", "2048");
-
-    err = ncmpi_create(MPI_COMM_WORLD, OUTPUT_NAME, cmode, info, &ncid); ERR
     MPI_Barrier(MPI_COMM_WORLD);
-    double io_time = 0;
+    start_time = MPI_Wtime();
+    err = ncmpi_create(MPI_COMM_WORLD, OUTPUT_NAME, cmode, MPI_INFO_NULL, &ncid); ERR
+    MPI_Barrier(MPI_COMM_WORLD);
+
     // printf("rank %d, recv_displs: %d, recvcounts: %d \n",  rank, recv_displs[i], recvcounts[i]);
 
-    start_time2 = MPI_Wtime();
-
+    start_time1 = MPI_Wtime();
     define_hdr(&local_hdr, ncid, rank);
-    io_time += MPI_Wtime() - start_time2;
-    end_time2 = MPI_Wtime();
-
-    MPI_Barrier(MPI_COMM_WORLD);
-    double enddef_time = 0;
-    start_time3 = MPI_Wtime();
+    io_time = MPI_Wtime() - start_time1;
     
+    
+    MPI_Barrier(MPI_COMM_WORLD);
+    start_time2 = MPI_Wtime();
     err = ncmpi_enddef(ncid); ERR
-
-    enddef_time = MPI_Wtime() - start_time3;
+    enddef_time = MPI_Wtime() - start_time2;
 
     // Clean up
-
+    MPI_Barrier(MPI_COMM_WORLD);
+    start_time3 = MPI_Wtime();
     err = ncmpi_close(ncid); ERR
-
-    MPI_Reduce(&io_time, &max_time, 1, MPI_DOUBLE, MPI_MAX, 0, MPI_COMM_WORLD);
-    MPI_Reduce(&io_time, &min_time, 1, MPI_DOUBLE, MPI_MIN, 0, MPI_COMM_WORLD);
-
-    if (rank == 0) {
-        printf("Max metadata write time: %f seconds\n", max_time);
-        printf("Min metadata write time: %f seconds\n", min_time);
-    }
-
-    MPI_Reduce(&enddef_time, &max_time, 1, MPI_DOUBLE, MPI_MAX, 0, MPI_COMM_WORLD);
-    MPI_Reduce(&enddef_time, &min_time, 1, MPI_DOUBLE, MPI_MIN, 0, MPI_COMM_WORLD);
-    if (rank == 0) {
-        printf("Max enddef time: %f seconds\n", max_time);
-        printf("Min enddef time: %f seconds\n", min_time);
-    }
+    end_time =  MPI_Wtime();
+    close_time = end_time - start_time3;
+    end_to_end_time = end_time - start_time;
     // free_hdr(&local_hdr);
+
+
+    double times[5] = {end_to_end_time, io_time, enddef_time, close_time, total_def_time};
+    char *names[5] = {"end-end", "write", "enddef", "close", "def_dim/var"};
+    double max_times[5], min_times[5];
+
+    MPI_Reduce(&times[0], &max_times[0], 5, MPI_DOUBLE, MPI_MAX, 0, MPI_COMM_WORLD);
+    MPI_Reduce(&times[0], &min_times[0], 5, MPI_DOUBLE, MPI_MIN, 0, MPI_COMM_WORLD);
+    for (int i = 0; i < 5; i++) {
+        if (rank == 0) {
+            printf("Max %s time: %f seconds\n", names[i], max_times[i]);
+            printf("Min %s time: %f seconds\n", names[i], min_times[i]);
+        }
+    }
     pnetcdf_check_mem_usage(MPI_COMM_WORLD);
     MPI_Finalize();
     return 0;

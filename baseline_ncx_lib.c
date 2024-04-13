@@ -12,7 +12,7 @@
   /* ---------------------------------- Serializaition ----------------------------------------*/
 
 int
-xlen_nc_type(nc_type xtype, int *size)
+meta_xlen_nc_type(nc_type xtype, int *size)
 {
     switch(xtype) {
         case NC_BYTE:
