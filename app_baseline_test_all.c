@@ -243,7 +243,7 @@ int define_hdr(struct hdr *hdr_data, int ncid){
         }
 
     }
-    return 0;
+    return nerrs;
 }
 
 static int deserialize_all_hdr(struct hdr **all_recv_hdr, char* all_collections_buffer, int* recv_displs, int* recvcounts, int nproc){

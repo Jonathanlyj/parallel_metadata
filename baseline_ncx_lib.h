@@ -77,7 +77,7 @@ typedef struct metabuffer {
 
 
 // /* Function prototypes */
-int xlen_nc_type(nc_type xtype, int *size);
+int meta_xlen_nc_type(nc_type xtype, int *size);
 void meta_free_hdr_dim(hdr_dim *dim);
 void meta_free_hdr_dimarray(hdr_dimarray *dims);
 void meta_free_hdr_attr(hdr_attr *attr);
