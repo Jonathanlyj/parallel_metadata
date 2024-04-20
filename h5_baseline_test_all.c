@@ -1,19 +1,25 @@
 #include <stdlib.h>
 #include <stdio.h>
 #include <string.h>
+#include <assert.h>
 #include "hdf5.h"
+#include <inttypes.h>
 
-// #define SRC_FILE "nue_slice_panoptic_hdf_merged.h5"
-#define SRC_FILE "h5_example.h5"
+
+#define SRC_FILE "nue_slice_panoptic_hdf_merged.h5"
+// #define SRC_FILE "/files2/scratch/yll6162/parallel_metadata/script/nue_slice_graphs.0001_new.h5"
+// #define SRC_FILE "h5_example.h5"
 #define OUT_FILE "h5_baseline_test_all.h5"
+#define FAIL -1
 double crt_start_time, total_crt_time=0;
 // Define a structure to represent a dataset
 typedef struct {
-    char *name;
     int name_len;
-    hid_t datatype;
-    int ndims;
-    hsize_t *dims;
+    int dtype_size;
+    int dspace_size;
+    char *name;
+    char *dtype;
+    char *dspace;
 } h5_dataset;
 
 // Define a structure to represent a group
@@ -30,6 +36,18 @@ typedef struct {
     h5_group **groups;
 } h5_grouparray;
 
+
+// void print_datatype(hid_t datatype_id) {
+//     if (H5Tget_class(datatype_id) == H5T_INTEGER) {
+//         printf("%"PRId64 "is Integer\n",datatype_id);
+//     } else if (H5Tget_class(datatype_id) == H5T_FLOAT) {
+//         printf("%"PRId64 "is Float\n",datatype_id);
+//     } else if (H5Tget_class(datatype_id) == H5T_STRING) {
+//         printf("%"PRId64 "is String\n",datatype_id);
+//     } else {
+//         printf("%"PRId64 "is Other\n",datatype_id);
+//     }
+// }
 // Function to create a group
 void new_group(const char *name, int name_len, int ndst, h5_group* group) {
     group->name = strdup(name);
@@ -40,15 +58,15 @@ void new_group(const char *name, int name_len, int ndst, h5_group* group) {
 }
 
 
-void new_dataset(const char *name, int name_len, hid_t datatype, int ndims, hsize_t* dims, h5_dataset* dataset){
+void new_dataset(const char *name, int name_len, char* dtype_tmp, size_t dtype_size, char* dspace_tmp, size_t dspace_size, h5_dataset* dataset){
     dataset->name = strdup(name);
     dataset->name_len = name_len;
-    dataset->ndims = ndims;
-    dataset->datatype = datatype;
-    dataset->dims = malloc(ndims * sizeof(hsize_t));
-    for (int i = 0; i < ndims; i++){
-        dataset->dims[i] = dims[i];
-    }
+    dataset->dtype_size = dtype_size;
+    dataset->dspace_size = dspace_size;
+    dataset->dtype = malloc(dtype_size);
+    memcpy(dataset->dtype, dtype_tmp, dtype_size);
+    dataset->dspace = malloc(dspace_size);
+    memcpy(dataset->dspace, dspace_tmp, dspace_size);
 }
 
 // Function to free memory used by a group
@@ -56,8 +74,8 @@ void free_dataset(h5_dataset *dataset) {
     if (dataset == NULL) {
         return;
     }
-    free(dataset->name);
-    free(dataset->dims);
+    free(dataset->dtype);
+    free(dataset->dspace);
     free(dataset);
 }
 void free_group(h5_group *group) {
@@ -80,10 +98,12 @@ void free_grouparray(h5_grouparray *local_meta) {
 
 /* ---------------------------------- Read Metadata ----------------------------------------*/
 void read_metadata(h5_grouparray* local_meta){
-    hid_t       file_id, group_id, dst_id, datatype, dataspace, memspace;
+    hid_t       file_id, group_id, dst_id, datatype_id, dataspace_id, memspace;
     herr_t      status;
     hsize_t ngrp, ndst;
     hsize_t *dims_out;
+    size_t dtype_size, dspace_size;
+    char *dtype_tmp, *dspace_tmp;
    // Open the file
     file_id = H5Fopen(SRC_FILE, H5F_ACC_RDONLY, H5P_DEFAULT);
 
@@ -112,20 +132,27 @@ void read_metadata(h5_grouparray* local_meta){
         for (int j = 0; j < ndst; j++) {
             char dst_name[256];
             local_meta->groups[i]->datasets[j] = malloc(sizeof(h5_dataset));
+            h5_dataset* dataset = local_meta->groups[i]->datasets[j];
             H5Gget_objname_by_idx(group_id, (hsize_t)j, dst_name, 256);
 
             dst_id = H5Dopen2(group_id, dst_name, H5P_DEFAULT); 
-            // Get dataspace and datatype
-            dataspace = H5Dget_space(dst_id);
-            datatype = H5Dget_type(dst_id);
+            // Get dataspace and datatype_id
+            datatype_id = H5Dget_type(dst_id);
+            status = H5Tencode(datatype_id, NULL, &dtype_size);
+            dtype_tmp = malloc(dtype_size);
+            status = H5Tencode(datatype_id, dtype_tmp, &dtype_size);
 
-            // Get dataset dimensions
-            int ndims;
-            ndims = H5Sget_simple_extent_ndims(dataspace);
-            dims_out = (hsize_t *)malloc(ndims * sizeof(hsize_t));
-            status = H5Sget_simple_extent_dims(dataspace, dims_out, NULL);
-            new_dataset(dst_name, strlen(dst_name),  datatype, ndims, dims_out, local_meta->groups[i]->datasets[j]);
-            free(dims_out);
+            dataspace_id = H5Dget_space(dst_id);
+            status = H5Sencode1(dataspace_id, NULL, &dspace_size);
+            dspace_tmp = malloc(dspace_size);
+            status = H5Sencode1(dataspace_id, dspace_tmp, &dspace_size);
+
+            new_dataset(dst_name, strlen(dst_name),  dtype_tmp, dtype_size, dspace_tmp, dspace_size, dataset);
+            free(dtype_tmp);
+            free(dspace_tmp);
+
+            H5Tclose(datatype_id);
+            H5Sclose(dataspace_id);
             H5Dclose(dst_id);
         }
         // Close the group
@@ -136,19 +163,23 @@ void read_metadata(h5_grouparray* local_meta){
 }
 
 void read_metadata_parallel(h5_grouparray* local_meta, int rank, int nproc){
-    hid_t       file_id, group_id, dst_id, datatype, dataspace, memspace;
+    hid_t       file_id, plist_id, group_id, dst_id, datatype_id, dataspace_id, memspace;
     herr_t      status;
     hsize_t ngrp, ndst;
     hsize_t *dims_out;
     int grps_per_proc, remainder, start, count;
-
-
-
+    // plist_id = H5Pcreate(H5P_FILE_ACCESS);
+    // H5Pset_fapl_mpio(plist_id, MPI_COMM_WORLD, MPI_INFO_NULL);
+    size_t dtype_size, dspace_size;
+    char *dtype_tmp, *dspace_tmp;
    // Open the file
+    // file_id = H5Fopen(SRC_FILE, H5F_ACC_RDONLY, plist_id);
     file_id = H5Fopen(SRC_FILE, H5F_ACC_RDONLY, H5P_DEFAULT);
-
+    // assert(file_id != FAIL);
+    // H5Pclose(plist_id);
     // Get the number of groups in the root
     H5Gget_num_objs(file_id, &ngrp);
+    
     grps_per_proc = ngrp / nproc;
     remainder = ngrp % nproc;
     // Determine start and count based on rank
@@ -164,7 +195,6 @@ void read_metadata_parallel(h5_grouparray* local_meta, int rank, int nproc){
         char group_name[256];
         local_meta->groups[i - start] = (h5_group*)malloc(sizeof(h5_group));
         H5Gget_objname_by_idx(file_id, (hsize_t)i, group_name, 256);
-
         // Open the group
         group_id = H5Gopen(file_id, group_name, H5P_DEFAULT);
 
@@ -172,29 +202,37 @@ void read_metadata_parallel(h5_grouparray* local_meta, int rank, int nproc){
 
         H5Gget_num_objs(group_id, &ndst);
         new_group(group_name, strlen(group_name), ndst, local_meta->groups[i - start]);
-        for (int j = 0; j < ndst; j++) {
+      for (int j = 0; j < ndst; j++) {
             char dst_name[256];
             local_meta->groups[i - start]->datasets[j] = malloc(sizeof(h5_dataset));
+            h5_dataset* dataset = local_meta->groups[i - start]->datasets[j];
             H5Gget_objname_by_idx(group_id, (hsize_t)j, dst_name, 256);
 
             dst_id = H5Dopen2(group_id, dst_name, H5P_DEFAULT); 
-            // Get dataspace and datatype
-            dataspace = H5Dget_space(dst_id);
-            datatype = H5Dget_type(dst_id);
+            // Get dataspace and datatype_id
+            datatype_id = H5Dget_type(dst_id);
+            status = H5Tencode(datatype_id, NULL, &dtype_size);
+            dtype_tmp = malloc(dtype_size);
+            status = H5Tencode(datatype_id, dtype_tmp, &dtype_size);
 
-            // Get dataset dimensions
-            int ndims;
-            ndims = H5Sget_simple_extent_ndims(dataspace);
-            dims_out = (hsize_t *)malloc(ndims * sizeof(hsize_t));
-            status = H5Sget_simple_extent_dims(dataspace, dims_out, NULL);
-            new_dataset(dst_name, strlen(dst_name),  datatype, ndims, dims_out, local_meta->groups[i - start]->datasets[j]);
-            free(dims_out);
+            dataspace_id = H5Dget_space(dst_id);
+            status = H5Sencode1(dataspace_id, NULL, &dspace_size);
+            dspace_tmp = malloc(dspace_size);
+            status = H5Sencode1(dataspace_id, dspace_tmp, &dspace_size);
+
+            new_dataset(dst_name, strlen(dst_name),  dtype_tmp, dtype_size, dspace_tmp, dspace_size, dataset);
+            free(dtype_tmp);
+            free(dspace_tmp);
+
+            H5Tclose(datatype_id);
+            H5Sclose(dataspace_id);
             H5Dclose(dst_id);
         }
         // Close the group
         H5Gclose(group_id);
     }
     // Close/release resources
+    
     H5Fclose(file_id);
 }
 
@@ -211,9 +249,11 @@ size_t calculate_buffer_size(h5_grouparray *grouparray) {
             h5_dataset *dataset = group->datasets[j];
             total_size += sizeof(int); // For name_len
             total_size += dataset->name_len; // For name
-            total_size += sizeof(hid_t); // For datatype
-            total_size += sizeof(int); // For ndims
-            total_size += dataset->ndims * sizeof(hsize_t); // For dims
+            total_size += sizeof(size_t); // For datatype
+            total_size += dataset->dtype_size; 
+            total_size += sizeof(size_t); // For dataspace
+            total_size += dataset->dspace_size; 
+
         }
     }
     return total_size;
@@ -223,12 +263,14 @@ void serialize_dataset(h5_dataset *dataset, char **ptr) {
     *ptr += sizeof(int);
     memcpy(*ptr, dataset->name, dataset->name_len);
     *ptr += dataset->name_len;
-    memcpy(*ptr, &(dataset->datatype), sizeof(hid_t));
-    *ptr += sizeof(hid_t);
-    memcpy(*ptr, &(dataset->ndims), sizeof(int));
-    *ptr += sizeof(int);
-    memcpy(*ptr, dataset->dims, dataset->ndims * sizeof(hsize_t));
-    *ptr += dataset->ndims * sizeof(hsize_t);
+    memcpy(*ptr, &(dataset->dtype_size), sizeof(size_t));
+    *ptr += sizeof(size_t);
+    memcpy(*ptr, dataset->dtype, dataset->dtype_size);
+    *ptr += dataset->dtype_size;
+    memcpy(*ptr, &(dataset->dspace_size), sizeof(size_t));
+    *ptr += sizeof(size_t);
+    memcpy(*ptr, dataset->dspace, dataset->dspace_size);
+    *ptr += dataset->dspace_size;
 }
 
 // Helper function to serialize a group
@@ -264,13 +306,16 @@ void deserialize_dataset(h5_dataset *dataset, char **ptr) {
     memcpy(dataset->name, *ptr, dataset->name_len);
     dataset->name[dataset->name_len] = '\0';
     *ptr += dataset->name_len;
-    memcpy(&(dataset->datatype), *ptr, sizeof(hid_t));
-    *ptr += sizeof(hid_t);
-    memcpy(&(dataset->ndims), *ptr, sizeof(int));
-    *ptr += sizeof(int);
-    dataset->dims = (hsize_t *)malloc(dataset->ndims * sizeof(hsize_t));
-    memcpy(dataset->dims, *ptr, dataset->ndims * sizeof(hsize_t));
-    *ptr += dataset->ndims * sizeof(hsize_t);
+    memcpy(&(dataset->dtype_size), *ptr, sizeof(size_t));
+    *ptr += sizeof(size_t);
+    dataset->dtype = (char *)malloc(dataset->dtype_size);
+    memcpy(dataset->dtype, *ptr, dataset->dtype_size);
+    *ptr += dataset->dtype_size;
+    memcpy(&(dataset->dspace_size), *ptr, sizeof(size_t));
+    *ptr += sizeof(size_t);
+    dataset->dspace = (char *)malloc(dataset->dspace_size);
+    memcpy(dataset->dspace, *ptr, dataset->dspace_size);
+    *ptr += dataset->dspace_size;
 }
 
 // Helper function to deserialize a group
@@ -296,7 +341,6 @@ void deserialize_grouparray(h5_grouparray *grouparray, void *buffer){
     char *ptr = (char *)buffer;
     memcpy(&(grouparray->ngrps), ptr, sizeof(int));
     ptr += sizeof(int);
-
     grouparray->groups = (h5_group **)malloc(grouparray->ngrps * sizeof(h5_group *));
     for (int i = 0; i < grouparray->ngrps; i++) {
         grouparray->groups[i] = (h5_group *)malloc(sizeof(h5_group));
@@ -304,31 +348,32 @@ void deserialize_grouparray(h5_grouparray *grouparray, void *buffer){
     }
 }
 
-static int deserialize_all_grouparray(h5_grouparray **all_recv_hdr, char* all_collections_buffer, int* recv_displs, int* recvcounts, int nproc){
+
+
+static int deserialize_all_grouparray(h5_grouparray **all_recv_meta, char* all_collections_buffer, int* recv_displs, int* recvcounts, int nproc){
     for (int i=0; i< nproc; i++){
-        all_recv_hdr[i]= (h5_grouparray *)malloc(sizeof(h5_grouparray));
-        deserialize_grouparray(all_recv_hdr[i], all_collections_buffer + recv_displs[i]);
+        all_recv_meta[i]= (h5_grouparray *)malloc(sizeof(h5_grouparray));
+        deserialize_grouparray(all_recv_meta[i], all_collections_buffer + recv_displs[i]);
+        // Access group and dataset information
     }
     return 0;
 }
 
-static int free_all_grouparray(h5_grouparray **all_recv_hdr, int nproc){
-    if (all_recv_hdr != NULL){
-        for (int i=0; i< nproc; i++) free_grouparray(all_recv_hdr[i]);
-        free(all_recv_hdr);
+static int free_all_grouparray(h5_grouparray **all_recv_meta, int nproc){
+    if (all_recv_meta != NULL){
+        for (int i=0; i< nproc; i++) free_grouparray(all_recv_meta[i]);
+        free(all_recv_meta);
     }
     return 0;
 }
 
 /* ---------------------------------- Write Metadata ----------------------------------------*/
 void create_metadata(h5_grouparray* local_meta, hid_t file_id) {
-    hid_t group_id, dataset_id, dataspace, datatype;
+    hid_t group_id, dataset_id, dataspace_id, datatype_id;
     herr_t status;
-
     // Iterate over each group in the local_meta
     for (int i = 0; i < local_meta->ngrps; i++) {
         h5_group* group = local_meta->groups[i];
-
         // Create a group in the HDF5 file
         crt_start_time = MPI_Wtime();
         group_id = H5Gcreate2(file_id, group->name, H5P_DEFAULT, H5P_DEFAULT, H5P_DEFAULT);
@@ -339,18 +384,17 @@ void create_metadata(h5_grouparray* local_meta, hid_t file_id) {
             h5_dataset* dataset = group->datasets[j];
 
             // Create dataspace
-            crt_start_time = MPI_Wtime();
-            dataspace = H5Screate_simple(dataset->ndims, dataset->dims, NULL);
-            total_crt_time += MPI_Wtime() - crt_start_time;
+            dataspace_id = H5Sdecode(dataset->dspace);
             // Create datatype
-            datatype = dataset->datatype;
+            datatype_id = H5Tdecode(dataset->dtype);
             // Create dataset
             crt_start_time = MPI_Wtime();
-            dataset_id = H5Dcreate2(group_id, dataset->name, datatype, dataspace, H5P_DEFAULT, H5P_DEFAULT, H5P_DEFAULT);
+            dataset_id = H5Dcreate2(group_id, dataset->name, datatype_id, dataspace_id, H5P_DEFAULT, H5P_DEFAULT, H5P_DEFAULT);
             total_crt_time += MPI_Wtime() - crt_start_time;
 
             // Close resources
-            H5Sclose(dataspace);
+            H5Tclose(datatype_id);
+            H5Sclose(dataspace_id);
             H5Dclose(dataset_id);
         }
 
@@ -359,9 +403,9 @@ void create_metadata(h5_grouparray* local_meta, hid_t file_id) {
     }
 }
 
-int create_all_metadata(h5_grouparray **all_recv_hdr, int nproc, hid_t file_id){
-    for (int i=0; i< nproc; i++){
-        h5_grouparray *hdr_data = all_recv_hdr[i];
+int create_all_metadata(h5_grouparray **all_recv_meta, int nproc, hid_t file_id){
+    for (int i=0; i<nproc; i++){
+        h5_grouparray *hdr_data = all_recv_meta[i];
         create_metadata(hdr_data, file_id);
     }
     return 0;
@@ -390,17 +434,10 @@ int main(int argc, char *argv[]) {
     MPI_Barrier(MPI_COMM_WORLD);
     start_time = start_time1 = MPI_Wtime();
     local_xsz = calculate_buffer_size(local_meta);
-    send_buffer = (char*) malloc(local_xsz);
-    serialize_grouparray(local_meta, send_buffer);
 
-    // status = serialize_meta(&local_meta, send_buffer);
-    // // Access group and dataset information
-    // for (int i = 0; i < local_meta->ngrps; i++) {
-    //     printf("Group name: %s, Length: %d\n", local_meta->groups[i]->name, local_meta->groups[i]->name_len);
-    //     printf("Number of datasets: %d\n", local_meta->groups[i]->ndst);
-    //     printf("First dataset name: %s, Length: %d\n", local_meta->groups[i]->datasets[0]->name, local_meta->groups[i]->datasets[0]->name_len);
-    // }
-       // printf("rank %d, buffer size: %lld \n", rank, local_hdr.xsz);
+    send_buffer = (char*) malloc(local_xsz);
+
+    serialize_grouparray(local_meta, send_buffer);
 
 
     // Phase 1: Communicate the sizes of the header structure for each process
@@ -423,6 +460,7 @@ int main(int argc, char *argv[]) {
         if(all_collection_sizes[i] < min_size){
             min_size = all_collection_sizes[i];
         }
+           
     }
     double total_recv_size_MB = total_recv_size / (1024.0 * 1024.0);
     double min_size_MB = min_size / (1024.0 * 1024.0);
@@ -438,16 +476,22 @@ int main(int argc, char *argv[]) {
     for (int i = 0; i < nproc; ++i) {
         recvcounts[i] = (int)all_collection_sizes[i];
     }
+    
     MPI_Allgatherv(send_buffer, local_xsz, MPI_BYTE, all_collections_buffer, recvcounts, recv_displs, MPI_BYTE, MPI_COMM_WORLD);
-    h5_grouparray **all_recv_hdr = (h5_grouparray **)malloc(nproc * sizeof(h5_grouparray*));
+    h5_grouparray **all_recv_meta = (h5_grouparray **)malloc(nproc * sizeof(h5_grouparray*));
+
+    deserialize_all_grouparray(all_recv_meta, all_collections_buffer, recv_displs, recvcounts, nproc);
+    // h5_grouparray * new_meta =  (h5_grouparray*)malloc(local_xsz);
+    // deserialize_grouparray(new_meta, send_buffer);
+    MPI_Barrier(MPI_COMM_WORLD);
+    end_time1 = MPI_Wtime();
     plist_id = H5Pcreate(H5P_FILE_ACCESS);
     H5Pset_fapl_mpio(plist_id, MPI_COMM_WORLD, MPI_INFO_NULL);
     outfile_id = H5Fcreate(OUT_FILE, H5F_ACC_TRUNC, H5P_DEFAULT, plist_id);
-    deserialize_all_grouparray(all_recv_hdr, all_collections_buffer, recv_displs, recvcounts, nproc);
-    MPI_Barrier(MPI_COMM_WORLD);
-    end_time1 = MPI_Wtime();
-    create_all_metadata(all_recv_hdr, nproc, outfile_id);
+    create_all_metadata(all_recv_meta, nproc, outfile_id);
 
+    // create_metadata(new_meta, outfile_id);
+    io_time = MPI_Wtime() - end_time1;
     MPI_Barrier(MPI_COMM_WORLD);
     end_time3 = MPI_Wtime();
     H5Pclose(plist_id);
@@ -470,7 +514,7 @@ int main(int argc, char *argv[]) {
         }
     }
     // Free memory used by the group array
-    free_all_grouparray(all_recv_hdr, nproc);
+    free_all_grouparray(all_recv_meta, nproc);
     free_grouparray(local_meta);
     free(send_buffer);
     free(all_collections_buffer);
