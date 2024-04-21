@@ -55,7 +55,7 @@ pnetcdf_check_mem_usage(MPI_Comm comm)
 
 /* ---------------------------------- Read Metadata ----------------------------------------*/
 
-void read_metdata(int rank, int size, struct hdr *file_info) {
+void read_metadata(int rank, int nproc, struct hdr *file_info) {
 
     int ncid, num_vars, num_dims, tot_num_dims, elem_sz, v_attrV_xsz, status;
     MPI_Offset start, count;
@@ -79,8 +79,8 @@ void read_metdata(int rank, int size, struct hdr *file_info) {
     file_info->xsz += 2 * sizeof(uint32_t); // NC_Variable and ndefined
     file_info->xsz += 2 * sizeof(uint32_t); // NC_Dimension and nelems
     // Calculate equal distribution of variables among processes
-    int vars_per_process = num_vars / size;
-    int remainder = num_vars % size;
+    int vars_per_process = num_vars / nproc;
+    int remainder = num_vars % nproc;
     // int remainder = num_vars % 8;    
     // int vars_per_process = num_vars / 8;
     // Determine start and count based on rank
@@ -279,43 +279,43 @@ int main(int argc, char *argv[]) {
     double start_time, start_time1, end_time1, end_time2, end_time3, end_time;
     MPI_Comm_rank(MPI_COMM_WORLD, &rank);
     MPI_Comm_size(MPI_COMM_WORLD, &nproc);
-    struct hdr dummy;
+    struct hdr local_hdr;
     // struct hdr recv_hdr;
-    // create_dummy_data(rank, &dummy);
-    read_metdata(rank, nproc, &dummy);
+    // create_local_hdr_data(rank, &local_hdr);
+    read_metadata(rank, nproc, &local_hdr);
    // Print the created data for each process
     // printf("\nRank %d:\n", rank);
-    // printf("Total Header Size: %lld\n", dummy.xsz);
+    // printf("Total Header Size: %lld\n", local_hdr.xsz);
     // printf("Dimensions:\n");
-    // for (int i = 0; i < dummy.dims.ndefined; i++) {
-    //     printf("  Name: %s, Size: %lld\n", dummy.dims.value[i]->name, dummy.dims.value[i]->size);
+    // for (int i = 0; i < local_hdr.dims.ndefined; i++) {
+    //     printf("  Name: %s, Size: %lld\n", local_hdr.dims.value[i]->name, local_hdr.dims.value[i]->size);
     // }
 
     // printf("Variables:\n");
-    // for (int i = 0; i < dummy.vars.ndefined; i++) {
-    //     printf("  Name: %s, Type: %d, NumDims: %d\n", dummy.vars.value[i]->name,  dummy.vars.value[i]->xtype, 
-    //     dummy.vars.value[i]->ndims);
+    // for (int i = 0; i < local_hdr.vars.ndefined; i++) {
+    //     printf("  Name: %s, Type: %d, NumDims: %d\n", local_hdr.vars.value[i]->name,  local_hdr.vars.value[i]->xtype, 
+    //     local_hdr.vars.value[i]->ndims);
     //     printf("    Dim IDs: ");
-    //     for (int j = 0; j < dummy.vars.value[i]->ndims; j++) {
-    //         printf("%d ", dummy.vars.value[i]->dimids[j]);
+    //     for (int j = 0; j < local_hdr.vars.value[i]->ndims; j++) {
+    //         printf("%d ", local_hdr.vars.value[i]->dimids[j]);
     //     }
     //     printf("\n");
     //     printf("    Attributes:\n");
-    //     for (int k = 0; k < dummy.vars.value[i]->attrs.ndefined; k++) {
-    //         printf("      Name: %s, Nelems: %lld, Type: %d\n", dummy.vars.value[i]->attrs.value[k]->name, 
-    //         dummy.vars.value[i]->attrs.value[k]->nelems, dummy.vars.value[i]->attrs.value[k]->xtype);
+    //     for (int k = 0; k < local_hdr.vars.value[i]->attrs.ndefined; k++) {
+    //         printf("      Name: %s, Nelems: %lld, Type: %d\n", local_hdr.vars.value[i]->attrs.value[k]->name, 
+    //         local_hdr.vars.value[i]->attrs.value[k]->nelems, local_hdr.vars.value[i]->attrs.value[k]->xtype);
     //     }
     // }
-    // printf("rank %d, buffer size: %lld \n", rank, dummy.xsz);
+    // printf("rank %d, buffer size: %lld \n", rank, local_hdr.xsz);
     MPI_Barrier(MPI_COMM_WORLD);
     start_time = start_time1 = MPI_Wtime();
-    char* send_buffer = (char*) malloc(dummy.xsz);
-    status = serialize_hdr(&dummy, send_buffer);
+    char* send_buffer = (char*) malloc(local_hdr.xsz);
+    status = serialize_hdr(&local_hdr, send_buffer);
 
 
     // Phase 1: Communicate the sizes of the header structure for each process
     MPI_Offset* all_collection_sizes = (MPI_Offset*) malloc(nproc * sizeof(MPI_Offset));
-    MPI_Allgather(&dummy.xsz, 1, MPI_OFFSET, all_collection_sizes, 1, MPI_OFFSET, MPI_COMM_WORLD);
+    MPI_Allgather(&local_hdr.xsz, 1, MPI_OFFSET, all_collection_sizes, 1, MPI_OFFSET, MPI_COMM_WORLD);
 
     // Calculate displacements for the second phase
     int* recv_displs = (int*) malloc(nproc * sizeof(int));
@@ -343,7 +343,7 @@ int main(int argc, char *argv[]) {
     //     printf("\nMin buffer size: %f MB \n", min_size_MB);
     // }
     
-    // printf("\nrank %d, dummy xsz %lld", rank, dummy.xsz);
+    // printf("\nrank %d, local_hdr xsz %lld", rank, local_hdr.xsz);
     // Allocate buffer for receiving all header data
     char* all_collections_buffer = (char*) malloc(total_recv_size);
     int* recvcounts =  (int*)malloc(nproc * sizeof(int));
@@ -352,7 +352,7 @@ int main(int argc, char *argv[]) {
     }
     // Phase 2: Communicate the actual header data
     // Before MPI_Allgatherv
-    MPI_Allgatherv(send_buffer, dummy.xsz, MPI_BYTE, all_collections_buffer, recvcounts, recv_displs, MPI_BYTE, MPI_COMM_WORLD);
+    MPI_Allgatherv(send_buffer, local_hdr.xsz, MPI_BYTE, all_collections_buffer, recvcounts, recv_displs, MPI_BYTE, MPI_COMM_WORLD);
     // Deserialize the received data and print if rank is 0
     
     int ncid, cmode;
