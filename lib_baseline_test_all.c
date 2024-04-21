@@ -23,9 +23,9 @@ static int verbose;
 
 #define ERR {if(err!=NC_NOERR){printf("Error at %s:%d : %s\n", __FILE__,__LINE__, ncmpi_strerror(err));nerrs++;}}
 
-#define SOURCE_NAME "/files2/scratch/yll6162/parallel_metadata/nue_slice_panoptic_hdf_merged.nc"
+#define SOURCE_NAME "/global/homes/y/yll6162/parallel_metadata/data/nue_slice_panoptic_hdf_merged.nc"
 // #define SOURCE_NAME "/files2/scratch/yll6162/parallel_metadata/script/dummy_test.nc"
-#define OUTPUT_NAME "lib_baseline_test_all.nc"
+#define OUTPUT_NAME "/pscratch/sd/y/yll6162/FS_2M_32/app_baseline_test_all.nc"
 
 double def_start_time;
 double total_def_time = 0;
@@ -181,7 +181,7 @@ void read_metdata(int rank, int size, struct hdr *file_info) {
 
             // Get attribute type and size
             nc_type attr_type;
-            size_t attr_size;
+            MPI_Offset attr_size;
             ncmpi_inq_att(ncid, i, variable_info->attrs.value[j]->name, &attr_type, &attr_size);
 
             // Allocate memory for attribute value and read it

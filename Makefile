@@ -1,5 +1,7 @@
 CC = cc
-PNETCDF_DIR = /global/homes/y/yll6162/pnetcdf/pnetcdf-install
+PNETCDF_DIR = /global/homes/y/yll6162/pnetcdf-meta/pnetcdf-sort-install # default
+# PNETCDF_DIR = /global/homes/y/yll6162/pnetcdf-meta/pnetcdf-install # parallel metadata creation
+# PNETCDF_DIR = /global/homes/y/yll6162/pnetcdf/pnetcdf-install # # parallel metadata creation optimized by sort
 CFLAGS = -O2
 INCLUDES = -I$(PNETCDF_DIR)/include
 LFLAGS = -L$(PNETCDF_DIR)/lib
