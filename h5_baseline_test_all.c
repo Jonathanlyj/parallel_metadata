@@ -6,9 +6,9 @@
 #include <inttypes.h>
 
 
-#define SRC_FILE "nue_slice_panoptic_hdf_merged.h5"
+// #define SRC_FILE "nue_slice_panoptic_hdf_merged.h5"
 // #define SRC_FILE "/files2/scratch/yll6162/parallel_metadata/script/nue_slice_graphs.0001_new.h5"
-// #define SRC_FILE "h5_example.h5"
+#define SRC_FILE "h5_example.h5"
 #define OUT_FILE "h5_baseline_test_all.h5"
 #define FAIL -1
 double crt_start_time, total_crt_time=0;
@@ -74,6 +74,7 @@ void free_dataset(h5_dataset *dataset) {
     if (dataset == NULL) {
         return;
     }
+    free(dataset->name);
     free(dataset->dtype);
     free(dataset->dspace);
     free(dataset);
@@ -439,7 +440,7 @@ int main(int argc, char *argv[]) {
 
     serialize_grouparray(local_meta, send_buffer);
 
-
+    
     // Phase 1: Communicate the sizes of the header structure for each process
     MPI_Offset* all_collection_sizes = (MPI_Offset*) malloc(nproc * sizeof(MPI_Offset));
     MPI_Allgather(&local_xsz, 1, MPI_OFFSET, all_collection_sizes, 1, MPI_OFFSET, MPI_COMM_WORLD);
@@ -479,7 +480,7 @@ int main(int argc, char *argv[]) {
     
     MPI_Allgatherv(send_buffer, local_xsz, MPI_BYTE, all_collections_buffer, recvcounts, recv_displs, MPI_BYTE, MPI_COMM_WORLD);
     h5_grouparray **all_recv_meta = (h5_grouparray **)malloc(nproc * sizeof(h5_grouparray*));
-
+    free_grouparray(local_meta);
     deserialize_all_grouparray(all_recv_meta, all_collections_buffer, recv_displs, recvcounts, nproc);
     // h5_grouparray * new_meta =  (h5_grouparray*)malloc(local_xsz);
     // deserialize_grouparray(new_meta, send_buffer);
@@ -515,7 +516,6 @@ int main(int argc, char *argv[]) {
     }
     // Free memory used by the group array
     free_all_grouparray(all_recv_meta, nproc);
-    free_grouparray(local_meta);
     free(send_buffer);
     free(all_collections_buffer);
     free(all_collection_sizes);
