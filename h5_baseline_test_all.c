@@ -6,9 +6,9 @@
 #include <inttypes.h>
 
 
-// #define SRC_FILE "nue_slice_panoptic_hdf_merged.h5"
-// #define SRC_FILE "/files2/scratch/yll6162/parallel_metadata/script/nue_slice_graphs.0001_new.h5"
-#define SRC_FILE "h5_example.h5"
+#define SRC_FILE "nue_slice_panoptic_hdf_merged_meta.h5"
+// #define SRC_FILE "/files2/scratch/yll6162/parallel_metadata/script/test/nue_slice_graphs.0001.h5"
+// #define SRC_FILE "h5_example.h5"
 #define OUT_FILE "h5_baseline_test_all.h5"
 #define FAIL -1
 double crt_start_time, total_crt_time=0;
@@ -174,10 +174,11 @@ void read_metadata_parallel(h5_grouparray* local_meta, int rank, int nproc){
     size_t dtype_size, dspace_size;
     char *dtype_tmp, *dspace_tmp;
    // Open the file
+   // Note: need to use serial I/O version of because H5Gget_objname_by_idx in dset loop errors out
     // file_id = H5Fopen(SRC_FILE, H5F_ACC_RDONLY, plist_id);
     file_id = H5Fopen(SRC_FILE, H5F_ACC_RDONLY, H5P_DEFAULT);
-    // assert(file_id != FAIL);
-    // H5Pclose(plist_id);
+    assert(file_id != FAIL);
+    
     // Get the number of groups in the root
     H5Gget_num_objs(file_id, &ngrp);
     
@@ -194,6 +195,7 @@ void read_metadata_parallel(h5_grouparray* local_meta, int rank, int nproc){
     // Iterate over groups in the root
     for (int i = start; i < start + count; ++i) {
         char group_name[256];
+
         local_meta->groups[i - start] = (h5_group*)malloc(sizeof(h5_group));
         H5Gget_objname_by_idx(file_id, (hsize_t)i, group_name, 256);
         // Open the group
@@ -205,10 +207,12 @@ void read_metadata_parallel(h5_grouparray* local_meta, int rank, int nproc){
         new_group(group_name, strlen(group_name), ndst, local_meta->groups[i - start]);
       for (int j = 0; j < ndst; j++) {
             char dst_name[256];
+            h5_dataset* dataset;
+            // if (i >= start && i < start + count){
             local_meta->groups[i - start]->datasets[j] = malloc(sizeof(h5_dataset));
-            h5_dataset* dataset = local_meta->groups[i - start]->datasets[j];
+            dataset = local_meta->groups[i - start]->datasets[j];
+                // }
             H5Gget_objname_by_idx(group_id, (hsize_t)j, dst_name, 256);
-
             dst_id = H5Dopen2(group_id, dst_name, H5P_DEFAULT); 
             // Get dataspace and datatype_id
             datatype_id = H5Dget_type(dst_id);
@@ -221,6 +225,7 @@ void read_metadata_parallel(h5_grouparray* local_meta, int rank, int nproc){
             dspace_tmp = malloc(dspace_size);
             status = H5Sencode1(dataspace_id, dspace_tmp, &dspace_size);
 
+            // if (i >= start && i < start + count) new_dataset(dst_name, strlen(dst_name),  dtype_tmp, dtype_size, dspace_tmp, dspace_size, dataset);
             new_dataset(dst_name, strlen(dst_name),  dtype_tmp, dtype_size, dspace_tmp, dspace_size, dataset);
             free(dtype_tmp);
             free(dspace_tmp);
@@ -233,7 +238,7 @@ void read_metadata_parallel(h5_grouparray* local_meta, int rank, int nproc){
         H5Gclose(group_id);
     }
     // Close/release resources
-    
+    // H5Pclose(plist_id);
     H5Fclose(file_id);
 }
 
@@ -370,7 +375,9 @@ static int free_all_grouparray(h5_grouparray **all_recv_meta, int nproc){
 
 /* ---------------------------------- Write Metadata ----------------------------------------*/
 void create_metadata(h5_grouparray* local_meta, hid_t file_id) {
-    hid_t group_id, dataset_id, dataspace_id, datatype_id;
+    hid_t group_id, dataset_id, dataspace_id, datatype_id, dcpl_id;
+    H5D_space_status_t space_status;
+    hsize_t            storage_size;
     herr_t status;
     // Iterate over each group in the local_meta
     for (int i = 0; i < local_meta->ngrps; i++) {
@@ -386,17 +393,29 @@ void create_metadata(h5_grouparray* local_meta, hid_t file_id) {
 
             // Create dataspace
             dataspace_id = H5Sdecode(dataset->dspace);
-            // Create datatype
+            // Create datatypes
             datatype_id = H5Tdecode(dataset->dtype);
             // Create dataset
+            dcpl_id = H5Pcreate(H5P_DATASET_CREATE);
+            // Set allocation time to late
+            status = H5Pset_alloc_time(dcpl_id, H5D_ALLOC_TIME_LATE);//no effect under parallel-io mode
+            // // Turn off auto-fill for the dataset
+            status = H5Pset_fill_time(dcpl_id, H5D_FILL_TIME_NEVER);
             crt_start_time = MPI_Wtime();
-            dataset_id = H5Dcreate2(group_id, dataset->name, datatype_id, dataspace_id, H5P_DEFAULT, H5P_DEFAULT, H5P_DEFAULT);
+            dataset_id = H5Dcreate(group_id, dataset->name, datatype_id, dataspace_id, H5P_DEFAULT, dcpl_id, H5P_DEFAULT);
             total_crt_time += MPI_Wtime() - crt_start_time;
 
-            // Close resources
+            // check storage space allocated
+            // status       = H5Dget_space_status(dataset_id, &space_status);
+            // storage_size = H5Dget_storage_size(dataset_id);
+            // printf("Space for %s has%sbeen allocated.\n", dataset->name,
+            //     space_status == H5D_SPACE_STATUS_ALLOCATED ? " " : " not ");
+            // printf("Storage size for %s is: %ld bytes.\n", dataset->name, (long)storage_size);
+                        // Close resources
+            H5Dclose(dataset_id);
+            H5Pclose(dcpl_id);
             H5Tclose(datatype_id);
             H5Sclose(dataspace_id);
-            H5Dclose(dataset_id);
         }
 
         // Close the group
@@ -494,8 +513,8 @@ int main(int argc, char *argv[]) {
     // create_metadata(new_meta, outfile_id);
     io_time = MPI_Wtime() - end_time1;
     MPI_Barrier(MPI_COMM_WORLD);
-    end_time3 = MPI_Wtime();
     H5Pclose(plist_id);
+    end_time3 = MPI_Wtime();
     H5Fclose(outfile_id);
     end_time = MPI_Wtime();
     close_time = end_time - end_time3;
