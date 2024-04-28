@@ -383,14 +383,16 @@ void create_metadata(h5_grouparray* local_meta, hid_t file_id) {
     for (int i = 0; i < local_meta->ngrps; i++) {
         h5_group* group = local_meta->groups[i];
         // Create a group in the HDF5 file
-        crt_start_time = MPI_Wtime();
-        group_id = H5Gcreate2(file_id, group->name, H5P_DEFAULT, H5P_DEFAULT, H5P_DEFAULT);
-        total_crt_time += MPI_Wtime() - crt_start_time;
+        // crt_start_time = MPI_Wtime();
+        // group_id = H5Gcreate2(file_id, group->name, H5P_DEFAULT, H5P_DEFAULT, H5P_DEFAULT);
+        // total_crt_time += MPI_Wtime() - crt_start_time;
 
         // Iterate over each dataset in the group
         for (int j = 0; j < group->ndst; j++) {
             h5_dataset* dataset = group->datasets[j];
-
+            char* flat_dataset_name = (char*)malloc(strlen(group->name) + strlen(dataset->name) + 2);
+            strcpy(flat_dataset_name, group->name);
+            strcat(flat_dataset_name, dataset->name);
             // Create dataspace
             dataspace_id = H5Sdecode(dataset->dspace);
             // Create datatypes
@@ -402,7 +404,7 @@ void create_metadata(h5_grouparray* local_meta, hid_t file_id) {
             // // Turn off auto-fill for the dataset
             status = H5Pset_fill_time(dcpl_id, H5D_FILL_TIME_NEVER);
             crt_start_time = MPI_Wtime();
-            dataset_id = H5Dcreate(group_id, dataset->name, datatype_id, dataspace_id, H5P_DEFAULT, dcpl_id, H5P_DEFAULT);
+            dataset_id = H5Dcreate(file_id, flat_dataset_name, datatype_id, dataspace_id, H5P_DEFAULT, dcpl_id, H5P_DEFAULT);
             total_crt_time += MPI_Wtime() - crt_start_time;
 
             // check storage space allocated
@@ -419,7 +421,7 @@ void create_metadata(h5_grouparray* local_meta, hid_t file_id) {
         }
 
         // Close the group
-        H5Gclose(group_id);
+        // H5Gclose(group_id);
     }
 }
 
