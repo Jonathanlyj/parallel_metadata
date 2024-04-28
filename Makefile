@@ -1,8 +1,8 @@
 CC = cc
 H5CC = h5pcc
-PNETCDF_DIR = /global/homes/y/yll6162/pnetcdf-meta/pnetcdf-sort-install # default
+# PNETCDF_DIR = /global/homes/y/yll6162/pnetcdf/pnetcdf-install# default
 # PNETCDF_DIR = /global/homes/y/yll6162/pnetcdf-meta/pnetcdf-install # parallel metadata creation
-# PNETCDF_DIR = /global/homes/y/yll6162/pnetcdf/pnetcdf-install # # parallel metadata creation optimized by sort
+PNETCDF_DIR = /global/homes/y/yll6162/pnetcdf-meta/pnetcdf-sort-install# parallel metadata creation optimized by sort
 CFLAGS = -O2
 INCLUDES = -I$(PNETCDF_DIR)/include
 LFLAGS = -L$(PNETCDF_DIR)/lib
@@ -42,7 +42,7 @@ h5_baseline_test_all: h5_baseline_test_all.o
 	$(H5CC) $(CFLAGS) $(INCLUDES) $(LFLAGS) -o $@ $^ $(LIBS)
 
 h5_%.o: h5_%.c
-	$(H5CC) $(CFLAGS) $(INCLUDES) -c $< -o $@
+	$(H5CC) $(CFLAGS) -c $< -o $@
 %.o: %.c
 	$(CC) $(CFLAGS) $(INCLUDES) -c $< -o $@
 
