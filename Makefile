@@ -1,6 +1,7 @@
-# PNETCDF_DIR=/files2/scratch/yll6162/PnetCDF-test/PnetCDF-install/
-# PNETCDF_DIR=/files2/scratch/yll6162/pnetcdf/PnetCDF-install
-PNETCDF_DIR=/files2/scratch/yll6162/PnetCDF-meta/PnetCDF-install
+# PNETCDF_DIR=/files2/scratch/yll6162/PnetCDF-meta/PnetCDF-install
+PNETCDF_DIR=/files2/scratch/yll6162/pnetcdf/PnetCDF-install
+# PNETCDF_DIR=/files2/scratch/yll6162/PnetCDF-meta/PnetCDF-sort-install
+
 CC = mpicc
 H5CC = h5pcc
 CFLAGS = -O0 -g -I$(PNETCDF_DIR)/include 
@@ -11,9 +12,9 @@ LIBS = -lpnetcdf
 SRCS = baseline_ex1.c baseline_ncx_app.c baseline_ncx_lib.c app_baseline_test_all.c baseline_test.c lib_level_baseline_test_shared.c lib_level_baseline_test_read.c lib_level_baseline_test_dup_name.c lib_baseline_test_all.c h5_baseline_test_all.c
 OBJS = $(SRCS:.c=.o)
 
+LIB_PROGRAMS = lib_level_baseline_test_shared lib_level_baseline_test_read lib_level_baseline_test_dup_name lib_baseline_test_all
 
-
-all: baseline_test baseline_ex1 app_baseline_test_all pnc_consist_check lib_level_baseline_test_shared lib_level_baseline_test_read lib_level_baseline_test_dup_name lib_baseline_test_all h5_baseline_test_all
+all: baseline_test baseline_ex1 app_baseline_test_all pnc_consist_check $(LIB_PROGRAMS) h5_baseline_test_all
 
 baseline_test: baseline_test.o baseline_ncx_app.o
 	$(CC) $(CFLAGS) $(INCLUDES) $(LFLAGS) -o $@ $^ $(LIBS)
@@ -49,4 +50,4 @@ copy:
 	cp ./lib_level_baseline_old.nc ./lib_level_baseline.nc
 clean:
 	rm -f $(OBJS)baseline_ex1 app_baseline_test_all pnc_consist_check lib_level_baseline_test_shared lib_level_baseline_test_read lib_level_baseline_test_dup_name lib_baseline_test_all h5_baseline_test_all
-
+lib: $(LIB_PROGRAMS)
