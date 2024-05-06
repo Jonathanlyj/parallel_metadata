@@ -9,7 +9,7 @@
 #define SRC_FILE "/pscratch/sd/y/yll6162/FS_2M_32/nue_slice_panoptic_hdf_merged_meta.h5"
 // #define SRC_FILE "/files2/scratch/yll6162/parallel_metadata/script/nue_slice_graphs.0001_new.h5"
 // #define SRC_FILE "h5_example.h5"
-#define OUT_FILE "/pscratch/sd/y/yll6162/FS_2M_32/h5_baseline_test_all.h5"
+#define OUT_FILE "/pscratch/sd/y/yll6162/FS_4M_32/h5_baseline_test_all.h5"
 #define FAIL -1
 double crt_start_time, total_crt_time=0;
 // Define a structure to represent a dataset
@@ -453,7 +453,9 @@ int main(int argc, char *argv[]) {
  
     read_metadata_parallel(local_meta, rank, nproc);
     // read_metadata(local_meta);
-
+    if (remove(OUT_FILE) == 0) {
+        printf("File %s deleted successfully.\n", OUT_FILE);
+    }
     MPI_Barrier(MPI_COMM_WORLD);
     start_time = start_time1 = MPI_Wtime();
     local_xsz = calculate_buffer_size(local_meta);
@@ -506,20 +508,18 @@ int main(int argc, char *argv[]) {
     deserialize_all_grouparray(all_recv_meta, all_collections_buffer, recv_displs, recvcounts, nproc);
     // h5_grouparray * new_meta =  (h5_grouparray*)malloc(local_xsz);
     // deserialize_grouparray(new_meta, send_buffer);
-    MPI_Barrier(MPI_COMM_WORLD);
-    end_time1 = MPI_Wtime();
-    block_size = 2 * 1024 * 1024;
+    block_size = 4 * 1024 * 1024;
     plist_id = H5Pcreate(H5P_FILE_ACCESS);
     H5Pset_fapl_mpio(plist_id, MPI_COMM_WORLD, MPI_INFO_NULL);
     H5Pset_coll_metadata_write(plist_id, true);
     H5Pset_meta_block_size(plist_id, block_size);
-    outfile_id = H5Fcreate(OUT_FILE, H5F_ACC_TRUNC, H5P_DEFAULT, plist_id);
+    outfile_id = H5Fcreate(OUT_FILE, H5F_ACC_EXCL, H5P_DEFAULT, plist_id);
     end_time1 = MPI_Wtime();
     create_all_metadata(all_recv_meta, nproc, outfile_id);
     // create_metadata(new_meta, outfile_id);
     io_time = MPI_Wtime() - end_time1;
-    MPI_Barrier(MPI_COMM_WORLD);
     H5Pclose(plist_id);
+    MPI_Barrier(MPI_COMM_WORLD);
     end_time3 = MPI_Wtime();
     H5Fclose(outfile_id);
     end_time = MPI_Wtime();
@@ -533,10 +533,16 @@ int main(int argc, char *argv[]) {
 
     MPI_Reduce(&times[0], &max_times[0], 5, MPI_DOUBLE, MPI_MAX, 0, MPI_COMM_WORLD);
     MPI_Reduce(&times[0], &min_times[0], 5, MPI_DOUBLE, MPI_MIN, 0, MPI_COMM_WORLD);
+    // for (int i = 0; i < 5; i++){
+    //     if (rank == 0) {
+    //         printf("Max %s time: %f seconds\n", names[i], max_times[i]);
+    //         printf("Min %s time: %f seconds\n", names[i], min_times[i]);
+    //     }
+    // }
     for (int i = 0; i < 5; i++){
         if (rank == 0) {
-            printf("Max %s time: %f seconds\n", names[i], max_times[i]);
-            printf("Min %s time: %f seconds\n", names[i], min_times[i]);
+            printf("%f\n", names[i], max_times[i]);
+            printf("%f\n", names[i], min_times[i]);
         }
     }
     // Free memory used by the group array
