@@ -4,6 +4,7 @@
 #include <assert.h>
 #include "hdf5.h"
 #include <inttypes.h>
+#include <sys/resource.h>
 
 
 #define SRC_FILE "nue_slice_panoptic_hdf_merged_meta.h5"
@@ -437,7 +438,7 @@ int create_all_metadata(h5_grouparray **all_recv_meta, int nproc, hid_t file_id)
 int main(int argc, char *argv[]) {
     MPI_Init(&argc, &argv);
     int rank, nproc;
-    hid_t outfile_id, plist_id ;
+    hid_t outfile_id, plist_id, fcpl_id;
     h5_grouparray* local_meta;
     size_t local_xsz, global_xsz;
     hsize_t block_size;
@@ -509,17 +510,25 @@ int main(int argc, char *argv[]) {
     MPI_Barrier(MPI_COMM_WORLD);
     end_time1 = MPI_Wtime();
     block_size = 2 * 1024 * 1024;
+    fcpl_id = H5Pcreate(H5P_FILE_CREATE);
+    H5Pset_istore_k(fcpl_id, 1024);
     plist_id = H5Pcreate(H5P_FILE_ACCESS);
     H5Pset_fapl_mpio(plist_id, MPI_COMM_WORLD, MPI_INFO_NULL);
     H5Pset_coll_metadata_write(plist_id, true);
     H5Pset_meta_block_size(plist_id, block_size);
-    outfile_id = H5Fcreate(OUT_FILE, H5F_ACC_TRUNC, H5P_DEFAULT, plist_id);
+    outfile_id = H5Fcreate(OUT_FILE, H5F_ACC_TRUNC, fcpl_id, plist_id);
     create_all_metadata(all_recv_meta, nproc, outfile_id);
+
+//     struct rusage r_usage;
+//     getrusage(RUSAGE_SELF,&r_usage);
+//   // Print the maximum resident set size used (in kilobytes).
+//     printf("\n Memory usage: %ld kilobytes\n",r_usage.ru_maxrss);
 
     // create_metadata(new_meta, outfile_id);
     io_time = MPI_Wtime() - end_time1;
     MPI_Barrier(MPI_COMM_WORLD);
     H5Pclose(plist_id);
+    H5Pclose(fcpl_id);
     end_time3 = MPI_Wtime();
     H5Fclose(outfile_id);
     end_time = MPI_Wtime();
