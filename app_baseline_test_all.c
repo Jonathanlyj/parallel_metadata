@@ -365,11 +365,17 @@ int main(int argc, char *argv[]) {
     // if (rank==0) printf("\n%s\n", OUTPUT_NAME);
     struct hdr **all_recv_hdr = (struct hdr **)malloc(nproc * sizeof(struct hdr*));
     deserialize_all_hdr(all_recv_hdr, all_collections_buffer, recv_displs, recvcounts, nproc);
-
-    err = ncmpi_create(MPI_COMM_WORLD, OUTPUT_NAME, cmode, MPI_INFO_NULL, &ncid); ERR
+    MPI_Info info = MPI_INFO_NULL;
+    MPI_Info_create(&info);
+    MPI_Info_set(info, "nc_hash_size_dim", "4096");
+    MPI_Info_set(info, "nc_hash_size_var", "4096");
+    err = ncmpi_create(MPI_COMM_WORLD, OUTPUT_NAME, cmode, info, &ncid); ERR
+    MPI_Info_free(&info);
     MPI_Barrier(MPI_COMM_WORLD);
     end_time1 = MPI_Wtime();
     define_all_hdr(all_recv_hdr, nproc, ncid);
+
+
     // for (int i = 0; i < nproc; ++i) {
     //     struct hdr *recv_hdr = (struct hdr *)malloc(sizeof(struct hdr)); 
     //     deserialize_hdr(recv_hdr, all_collections_buffer + recv_displs[i], recvcounts[i]);

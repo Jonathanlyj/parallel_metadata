@@ -279,7 +279,11 @@ int main(int argc, char *argv[]) {
     // if (rank==0) printf("\n%s\n", OUTPUT_NAME);
     MPI_Barrier(MPI_COMM_WORLD);
     start_time = MPI_Wtime();
-    err = ncmpi_create(MPI_COMM_WORLD, OUTPUT_NAME, cmode, MPI_INFO_NULL, &ncid); ERR
+    MPI_Info info = MPI_INFO_NULL;
+    MPI_Info_create(&info);
+    MPI_Info_set(info, "nc_hash_size_dim", "4096");
+    MPI_Info_set(info, "nc_hash_size_var", "4096");
+    err = ncmpi_create(MPI_COMM_WORLD, OUTPUT_NAME, cmode, info, &ncid); ERR
     MPI_Barrier(MPI_COMM_WORLD);
 
     // printf("rank %d, recv_displs: %d, recvcounts: %d \n",  rank, recv_displs[i], recvcounts[i]);
