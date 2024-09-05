@@ -7,7 +7,7 @@ PNETCDF_DIR_FORMAT=/files2/scratch/yll6162/PnetCDF-meta/PnetCDF-format-install
 
 CC = mpicc
 H5CC = h5pcc
-CFLAGS = -O0 -g -I$(PNETCDF_DIR)/include 
+CFLAGS = -O0 -g
 INCLUDES = -I$(PNETCDF_DIR)/include
 INCLUDES_LIBBASE = -I$(PNETCDF_DIR_LIBBASE)/include
 INCLUDES_FORMAT = -I$(PNETCDF_DIR_FORMAT)/include
@@ -56,14 +56,17 @@ lib_level_baseline_test_dup_name: lib_level_baseline_test_dup_name.o $(PNETCDF_D
 lib_baseline_test_all: lib_baseline_test_all.o baseline_ncx_lib.o $(PNETCDF_DIR_LIBBASE)/lib/libpnetcdf.a
 	$(CC) $(CFLAGS) $(INCLUDES) $(LFLAGS) -o $@ $^ $(LIBS)
 
-new_format_create_simple: new_format_create_simple.o $(PNETCDF_DIR)/lib/libpnetcdf.a
-	$(CC) $(CFLAGS) $(INCLUDES) $(LFLAGS) -o $@ $^ $(LIBS)
+new_format_create_simple: new_format_create_simple.o $(PNETCDF_DIR_FORMAT)/lib/libpnetcdf.a
+	$(CC) $(CFLAGS) $(INCLUDES_FORMAT) $(LFLAGS) -o $@ $^ $(LIBS)
 
-new_format_create_diff: new_format_create_diff.o $(PNETCDF_DIR)/lib/libpnetcdf.a
-	$(CC) $(CFLAGS) $(INCLUDES) $(LFLAGS) -o $@ $^ $(LIBS)
+new_format_create_large: new_format_create_large.o $(PNETCDF_DIR_FORMAT)/lib/libpnetcdf.a
+	$(CC) $(CFLAGS) $(INCLUDES_FORMAT) $(LFLAGS) -o $@ $^ $(LIBS)
+
+new_format_create_diff: new_format_create_diff.o $(PNETCDF_DIR_FORMAT)/lib/libpnetcdf.a
+	$(CC) $(CFLAGS) $(INCLUDES_FORMAT) $(LFLAGS) -o $@ $^ $(LIBS)
 
 new_format_open: new_format_open.o $(PNETCDF_DIR)/lib/libpnetcdf.a
-	$(CC) $(CFLAGS) $(INCLUDES) $(LFLAGS) -o $@ $^ $(LIBS)
+	$(CC) $(CFLAGS) $(INCLUDES_FORMAT) $(LFLAGS) -o $@ $^ $(LIBS)
 
 h5_baseline_test_all: h5_baseline_test_all.o
 	$(H5CC) $(CFLAGS) -o $@ $^ 
@@ -78,8 +81,7 @@ clean:
 base: baseline_test baseline_ex1 app_baseline_test_all pnc_consist_check
 lib: $(LIB_PROGRAMS)
 h5: h5_baseline_test_all
-new_format: new_format_create_simple new_format_create_diff new_format_open
-check_format: new_format
+new_format: new_format_create_simple new_format_create_diff new_format_open new_format_create_large
+check_format: new_format_create_simple new_format_open
 	mpiexec -n 4 ./new_format_create_simple
-	mpiexec -n 4 ./new_format_create_diff
 	mpiexec -n 4 ./new_format_open
