@@ -66,3 +66,8 @@ clean:
 base: baseline_test baseline_ex1 app_baseline_test_all pnc_consist_check
 lib: $(LIB_PROGRAMS)
 h5: h5_baseline_test_all
+new_format: new_format_create_simple new_format_create_diff new_format_open
+check: new_format
+	mpiexec -n 4 ./new_format_create_simple
+	mpiexec -n 4 ./new_format_create_diff
+	mpiexec -n 4 ./new_format_open
