@@ -52,13 +52,13 @@ pnetcdf_io(MPI_Comm comm, char *filename, int cmode)
     MPI_Comm_rank(comm, &rank);
     MPI_Comm_size(comm, &nprocs);
 
+    
+    double total_read_time = 0;
+    double read_start_time = MPI_Wtime();
     /* open the newly created file for read only -----------------------------*/
     err = ncmpi_open(MPI_COMM_WORLD, filename, NC_NOWRITE, MPI_INFO_NULL, &ncid);
     ERR
-    /*read the number of blocks*/
-    int nblocks;
-    err = ncmpi_inq_nblocks(ncid, &nblocks);
-    // printf("\nThere are this number of blocks: %d\n", nblocks);
+
 
     /* read the block name & block id*/
     char blk_name[20], var_name[20];    
@@ -69,63 +69,69 @@ pnetcdf_io(MPI_Comm comm, char *filename, int cmode)
     MPI_Offset var_size = 1;
 
 
-    for (int i = 0; i < nblocks; i++){
-        err = ncmpi_inq_blockname(ncid, i, blk_name);
-        // printf("\nBlock %d name: %s\n", i, blk_name);
-        err = ncmpi_inq_blkid(ncid, blk_name, &blkid);
-        // printf("\nBlock %d id: %d\n", i, blkid);
-    }
 
-    
-    blkid = rank % nblocks;
-    // printf("\nRank %d will read block %d\n", rank, blkid);
-    err= ncmpi_open_block(ncid, blkid);
+    err = ncmpi_inq(ncid, NULL, &ndims, &nvars, NULL);
     ERR;
-    err = ncmpi_inq_block(ncid, blkid, NULL, &ndims, &nvars, NULL);
-    ERR;
-
-    printf("\nBlock %d has %d dimensions and %d variables\n", blkid, ndims, nvars);
-    if (nvars>0){
-        err = ncmpi_inq_var(ncid, blkid, 0, var_name, NULL, &v_ndims, NULL, NULL);
-        printf("\nBlock %d has variable %s with %d dims\n", blkid, var_name, v_ndims);
+   for (varid = 0; varid < nvars; varid++){
+        err = ncmpi_inq_var(ncid, varid, var_name, NULL, &v_ndims, NULL, NULL);
+        // printf("\nBlock %d has variable %s with %d dims\n", var_name, v_ndims);
         v_dimids = (int*) malloc(v_ndims * sizeof(int));
         dim_sizes = (MPI_Offset*) malloc(v_ndims * sizeof(MPI_Offset));
-        err = ncmpi_inq_var(ncid, blkid, 0, NULL, NULL, NULL, v_dimids, NULL);
+        err = ncmpi_inq_var(ncid, varid, NULL, NULL, NULL, v_dimids, NULL);
         for (int j = 0; j < v_ndims; j++){
-            err = ncmpi_inq_dimlen(ncid, blkid, v_dimids[j], &dim_sizes[j]);
-            var_size *= dim_sizes[j];
-            printf("\nDimension %d has size %lld\n", j, dim_sizes[j]);
+            err = ncmpi_inq_dimlen(ncid, v_dimids[j], &dim_sizes[j]);
+            // var_size *= dim_sizes[j];
+            // printf("\nDimension %d has size %lld\n", j, dim_sizes[j]);
         }
         free(dim_sizes);
         free(v_dimids);
     }
+
+
+
+    // total_read_time += MPI_Wtime() - read_start_time;
+
+
+    
+
+    // printf("\nRank %d will read block %d\n", rank, blkid);
+
+    // printf("\nBlock %d has %d dimensions and %d variables\n", blkid, ndims, nvars);
+
     // Allocate memory for the raw data array (since we're dealing with integers)
     // printf("\nVariable size: %lld\n", var_size);
-    int *data = (int *)malloc(var_size * sizeof(int));
-    if (data == NULL) {
-        printf("Error: memory allocation failed\n");
-        MPI_Abort(MPI_COMM_WORLD, 1);
-    }
-    // Read the integer variable data into the C array
-    if ((err = ncmpi_get_var_int_all(ncid, blkid, 0, data))) {
-        printf("Error: ncmpi_get_var_int_all() failed (%s)\n", ncmpi_strerror(err));
-        MPI_Abort(MPI_COMM_WORLD, err);
-    }
+    // int *data = (int *)malloc(var_size * sizeof(int));
+    // if (data == NULL) {
+    //     printf("Error: memory allocation failed\n");
+    //     MPI_Abort(MPI_COMM_WORLD, 1);
+    // }
+    // // Read the integer variable data into the C array
+    // if ((err = ncmpi_get_var_int_all(ncid, blkid, 0, data))) {
+    //     printf("Error: ncmpi_get_var_int_all() failed (%s)\n", ncmpi_strerror(err));
+    //     MPI_Abort(MPI_COMM_WORLD, err);
+    // }
 
     // Print a small portion of the data (for example, the first 10 values)
     // printf("First 10 data values: ");
     // for (int i = 0; i < 10 && i < var_size; i++) {
     //     printf("%d ", data[i]);
     // }
-    ERR;
-    free(data);
+    // ERR;
+    // free(data);
 
 
     /* close file */
     err = ncmpi_close(ncid);
     ERR
+    total_read_time += MPI_Wtime() - read_start_time;
+    double max_time, min_time;
+    MPI_Reduce(&total_read_time, &max_time, 1, MPI_DOUBLE, MPI_MAX, 0, MPI_COMM_WORLD);
+    MPI_Reduce(&total_read_time, &min_time, 1, MPI_DOUBLE, MPI_MIN, 0, MPI_COMM_WORLD);
+    if (rank == 0) {
+        printf("Max read time: %f seconds\n",  max_time);
+        printf("Min read time: %f seconds\n", min_time);
+    }
 
-    
     return nerrs;
 }
 
@@ -153,7 +159,7 @@ int main(int argc, char** argv)
                       MPI_Finalize();
                       return 1;
         }
-    if (argv[optind] == NULL) strcpy(filename, "new_format_test_all.pnc");
+    if (argv[optind] == NULL) strcpy(filename, "app_baseline_test_all.nc");
     else                      snprintf(filename, 256, "%s", argv[optind]);
 
     MPI_Bcast(filename, 256, MPI_CHAR, 0, MPI_COMM_WORLD);

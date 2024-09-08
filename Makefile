@@ -44,6 +44,8 @@ baseline_ex1: baseline_ex1.o baseline_ncx_app.o
 app_baseline_test_all: app_baseline_test_all.o baseline_ncx_app.o
 	$(CC) $(CFLAGS) $(INCLUDES) $(LFLAGS) -o $@ $^ $(LIBS)
 
+app_baseline_read_test_all: app_baseline_read_test_all.o baseline_ncx_app.o
+	$(CC) $(CFLAGS) $(INCLUDES) $(LFLAGS) -o $@ $^ $(LIBS)
 save_input_test_all: save_input_test_all.o baseline_ncx_app.o
 	$(CC) $(CFLAGS) $(INCLUDES) $(LFLAGS) -o $@ $^ $(LIBS)
 
@@ -76,6 +78,9 @@ new_format_open: new_format_open.o $(PNETCDF_DIR_FORMAT)/lib/libpnetcdf.a
 
 new_format_test_all: new_format_test_all.o baseline_ncx_app.o $(PNETCDF_DIR_FORMAT)/lib/libpnetcdf.a
 	$(CC) $(CFLAGS) $(INCLUDES_FORMAT) $(LFLAGS_FORMAT) $(LIBS) -o $@ $^ 
+
+new_format_read_test_all: new_format_read_test_all.o baseline_ncx_app.o $(PNETCDF_DIR_FORMAT)/lib/libpnetcdf.a
+	$(CC) $(CFLAGS) $(INCLUDES_FORMAT) $(LFLAGS_FORMAT) $(LIBS) -o $@ $^
 	
 h5_baseline_test_all: h5_baseline_test_all.o
 	$(H5CC) $(CFLAGS) -o $@ $^ 

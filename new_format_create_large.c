@@ -10,13 +10,12 @@
 #include <string.h> /* strcpy(), strncpy() */
 #include <unistd.h> /* getopt() */
 #include <time.h>   /* time() localtime(), asctime() */
-#include <assert.h>
 #include <mpi.h>
 #include <pnetcdf.h>
 
-
 #define NY 10
 #define NX 4
+#define NUM_VARS 568896
 
 static int verbose;
 
@@ -45,87 +44,73 @@ pnetcdf_io(MPI_Comm comm, char *filename, int cmode)
     int ncid, varid, blkid, dimid[2];
     char str_att[128];
     float float_att[100];
-
     MPI_Offset  global_ny, global_nx;
     MPI_Offset start[2], count[2];
 
     MPI_Comm_rank(comm, &rank);
     MPI_Comm_size(comm, &nprocs);
 
-    /* open the newly created file for read only -----------------------------*/
-    err = ncmpi_open(MPI_COMM_WORLD, filename, NC_NOWRITE, MPI_INFO_NULL, &ncid);
-    ERR
-    /*read the number of blocks*/
-    int nblocks;
-    err = ncmpi_inq_nblocks(ncid, &nblocks);
-    // printf("\nThere are this number of blocks: %d\n", nblocks);
+    /* create a new file for writing ----------------------------------------*/
+    cmode |= NC_CLOBBER;
+    err = ncmpi_create(comm, filename, cmode, MPI_INFO_NULL, &ncid); ERR
 
-    /* read the block name & block id*/
-    char blk_name[20], var_name[20];    
-    int nvars;
-    int ndims, v_ndims;
-    int* v_dimids;
-    MPI_Offset* dim_sizes;
-    MPI_Offset var_size = 1;
+    /* the global array is NY * (NX * nprocs) */
+    global_ny = NY;
+    global_nx = NX * (rank + 1);
 
 
-    for (int i = 0; i < nblocks; i++){
-        err = ncmpi_inq_blockname(ncid, i, blk_name);
-        // printf("\nBlock %d name: %s\n", i, blk_name);
-        err = ncmpi_inq_blkid(ncid, blk_name, &blkid);
-        // printf("\nBlock %d id: %d\n", i, blkid);
-    }
+    /* add a global attribute: a time stamp at rank 0 */
+    time_t ltime = time(NULL); /* get the current calendar time */
+    asctime_r(localtime(&ltime), str_att);
+    sprintf(str_att, "Mon Aug 13 21:27:48 2018");
 
+
+    // if (rank < 3){
+    err = ncmpi_put_att_text(ncid, NC_GLOBAL, "history", strlen(str_att),
+                             &str_att[0]); ERR
+
+    /* define dimensions x and y */
+    char str_y[20];
+    char str_blk[20];
+    // char shared_y[20];
+    // char shared_x[20];
+    char str_x[20];
+    char var_rank[20];
+    char shared_var[20];
+    // sprintf(shared_y, "Y_shared");
+    // sprintf(shared_x, "X_shared");
+    int num_local_vars = NUM_VARS / nprocs;
+    int local_var_start = rank * num_local_vars;
+    if (rank == nprocs - 1)
+        num_local_vars = NUM_VARS - (nprocs - 1) * num_local_vars;
     
-    blkid = rank % nblocks;
-    // printf("\nRank %d will read block %d\n", rank, blkid);
-    err= ncmpi_open_block(ncid, blkid);
-    ERR;
-    err = ncmpi_inq_block(ncid, blkid, NULL, &ndims, &nvars, NULL);
-    ERR;
-
-    printf("\nBlock %d has %d dimensions and %d variables\n", blkid, ndims, nvars);
-    if (nvars>0){
-        err = ncmpi_inq_var(ncid, blkid, 0, var_name, NULL, &v_ndims, NULL, NULL);
-        printf("\nBlock %d has variable %s with %d dims\n", blkid, var_name, v_ndims);
-        v_dimids = (int*) malloc(v_ndims * sizeof(int));
-        dim_sizes = (MPI_Offset*) malloc(v_ndims * sizeof(MPI_Offset));
-        err = ncmpi_inq_var(ncid, blkid, 0, NULL, NULL, NULL, v_dimids, NULL);
-        for (int j = 0; j < v_ndims; j++){
-            err = ncmpi_inq_dimlen(ncid, blkid, v_dimids[j], &dim_sizes[j]);
-            var_size *= dim_sizes[j];
-            printf("\nDimension %d has size %lld\n", j, dim_sizes[j]);
-        }
-        free(dim_sizes);
-        free(v_dimids);
-    }
-    // Allocate memory for the raw data array (since we're dealing with integers)
-    // printf("\nVariable size: %lld\n", var_size);
-    int *data = (int *)malloc(var_size * sizeof(int));
-    if (data == NULL) {
-        printf("Error: memory allocation failed\n");
-        MPI_Abort(MPI_COMM_WORLD, 1);
-    }
-    // Read the integer variable data into the C array
-    if ((err = ncmpi_get_var_int_all(ncid, blkid, 0, data))) {
-        printf("Error: ncmpi_get_var_int_all() failed (%s)\n", ncmpi_strerror(err));
-        MPI_Abort(MPI_COMM_WORLD, err);
+    sprintf(str_blk, "blk_rank_%d", rank);
+    err = ncmpi_def_block(ncid, str_blk, &blkid); ERR
+    for (i = local_var_start; i < local_var_start + num_local_vars; i++) {
+        sprintf(str_y, "dim_Y_rank_%d_var_%d", rank, i);
+        sprintf(str_x, "dim_X_rank_%d_var_%d", rank, i);
+        sprintf(var_rank, "var_%d_rank_%d", i, rank);
+        err = ncmpi_def_dim(ncid, blkid, str_y, NY, &dimid[0]); ERR
+        err = ncmpi_def_dim(ncid, blkid, str_x, global_nx, &dimid[1]); ERR
+        err = ncmpi_def_var(ncid, blkid, var_rank, NC_INT, 2, dimid, &varid); ERR
     }
 
-    // Print a small portion of the data (for example, the first 10 values)
-    // printf("First 10 data values: ");
-    // for (int i = 0; i < 10 && i < var_size; i++) {
-    //     printf("%d ", data[i]);
-    // }
-    ERR;
-    free(data);
-
-
-    /* close file */
-    err = ncmpi_close(ncid);
-    ERR
-
+    int buf[NY][global_nx];
+    for (i=0; i<NY; i++)
+        for (j=0; j<global_nx; j++)
+            buf[i][j] = rank + 1;
     
+    err = ncmpi_enddef(ncid); ERR
+
+
+    // err = ncmpi_put_var_int_all(ncid, blkid, varid,  &buf[0][0]); ERR
+    
+
+
+    MPI_Barrier(comm);
+    err = ncmpi_close(ncid); ERR
+
+    // printf("\n rank %d: after file close", rank);
     return nerrs;
 }
 
@@ -153,7 +138,7 @@ int main(int argc, char** argv)
                       MPI_Finalize();
                       return 1;
         }
-    if (argv[optind] == NULL) strcpy(filename, "new_format_test_all.pnc");
+    if (argv[optind] == NULL) strcpy(filename, "new_format_create_large.pnc");
     else                      snprintf(filename, 256, "%s", argv[optind]);
 
     MPI_Bcast(filename, 256, MPI_CHAR, 0, MPI_COMM_WORLD);
