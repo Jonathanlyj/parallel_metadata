@@ -511,13 +511,13 @@ int main(int argc, char *argv[]) {
     // deserialize_grouparray(new_meta, send_buffer);
     MPI_Barrier(MPI_COMM_WORLD);
     end_time1 = MPI_Wtime();
-    block_size = 4 * 1024 * 1024;
+    block_size = 64 * 1024 * 1024;
     fcpl_id = H5Pcreate(H5P_FILE_CREATE);
-    H5Pset_istore_k(fcpl_id, 1024);
+    // H5Pset_istore_k(fcpl_id, 1024);
     plist_id = H5Pcreate(H5P_FILE_ACCESS);
     H5Pset_fapl_mpio(plist_id, MPI_COMM_WORLD, MPI_INFO_NULL);
     H5Pset_coll_metadata_write(plist_id, true);
-    H5Pset_meta_block_size(plist_id, block_size);
+    // H5Pset_meta_block_size(plist_id, block_size);
     outfile_id = H5Fcreate(OUT_FILE, H5F_ACC_TRUNC, fcpl_id, plist_id);
     create_all_metadata(all_recv_meta, nproc, outfile_id);
 
