@@ -441,6 +441,11 @@ static int deserialize_var(metabuffer *gbp, hdr_var *varp) {
     //     return -1;
     // }
     /* get name */
+    varp->name = NULL;
+    varp->name_len = 0;
+    varp->dimids = NULL;
+    varp->attrs.ndefined = 0;
+    varp->attrs.value = NULL;
     err = deserialize_name(gbp, &name);
     if (err != NC_NOERR) return err;
     varp->name = name;
@@ -521,6 +526,7 @@ int deserialize_hdr(struct hdr *ncp, void *buf, int buf_size) {
     status = deserialize_vararray(&getbuf, &ncp->vars);
     if (status != NC_NOERR) return status;
     // printf("HERE: %ld", getbuf.pos - getbuf.base);
+    // printf("HERE: %ld",  getbuf.size);
     assert((int)(getbuf.pos - getbuf.base) == getbuf.size);
 
 
@@ -551,7 +557,6 @@ void free_hdr_attr(hdr_attr *attr) {
     if (attr != NULL) {
         free(attr->name);
         free(attr->xvalue);
-        // free(attr);
     }
 }
 
@@ -561,9 +566,9 @@ void free_hdr_attrarray(hdr_attrarray *attrs) {
             for (int i = 0; i < attrs->ndefined; i++) {
                 free_hdr_attr(attrs->value[i]);
             }
-            // free(attrs->value);
+            free(attrs->value);
             attrs->value = NULL;
-            // free(attrs);
+            free(attrs);
         }
     }
 }
@@ -572,6 +577,7 @@ void free_hdr_var(hdr_var *var) {
     if (var != NULL) {
         free(var->name);
         free(var->dimids);
+
         free_hdr_attrarray(&(var->attrs));
         free(var);
     }
@@ -592,7 +598,6 @@ void free_hdr(struct hdr *header) {
         free_hdr_dimarray(&(header->dims));
         // free_hdr_attrarray(&(header->attrs));
         free_hdr_vararray(&(header->vars));
-        free(header);
     }
 }
 

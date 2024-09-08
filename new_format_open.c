@@ -84,6 +84,7 @@ pnetcdf_io(MPI_Comm comm, char *filename, int cmode)
     ERR;
     err = ncmpi_inq_block(ncid, blkid, NULL, &ndims, &nvars, NULL);
     ERR;
+
     // printf("\nBlock %d has %d dimensions and %d variables\n", blkid, ndims, nvars);
     if (nvars>0){
         err = ncmpi_inq_var(ncid, blkid, 0, var_name, NULL, &v_ndims, NULL, NULL);
