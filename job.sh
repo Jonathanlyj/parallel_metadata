@@ -2,7 +2,7 @@
 
 #SBATCH -A m844
 #SBATCH -t 00:2:00
-#SBATCH -N 1
+#SBATCH -N 4
 #SBATCH -C cpu
 #SBATCH --qos=debug
 
@@ -22,10 +22,12 @@ NP=$((NUM_NODES * SLURM_NTASKS_PER_NODE))
 
 ulimit -c unlimited
 
-EXE=/global/homes/y/yll6162/parallel_metadata/lib_baseline_test_all
+# EXE=/global/homes/y/yll6162/parallel_metadata/lib_baseline_test_all
+# EXE=/global/homes/y/yll6162/parallel_metadata/save_input_test_all
+EXE=/global/homes/y/yll6162/parallel_metadata/app_baseline_read_test_all
 SB_EXE=/tmp/${USER}_test #tmp all users shared
 sbcast -v ${EXE} ${SB_EXE} #executable copy to this position
 # export LD_LIBRARY_PATH="/global/homes/y/yll6162/pnetcdf/pnetcdf-install/lib:$LD_LIBRARY_PATH"
 # export PNETCDF_HINTS="nc_hash_size_dim=4096;nc_hash_size_var=4096"
-srun -n $NP -c $((256/$SLURM_NTASKS_PER_NODE)) --cpu_bind=cores ${SB_EXE} # 8 process per node => 256/8=32
+srun -n $NP -c $((256/$SLURM_NTASKS_PER_NODE)) --cpu_bind=cores ${SB_EXE} 
 #srun python ...

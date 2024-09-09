@@ -21,7 +21,7 @@
 static int verbose;
 
 #define ERR {if(err!=NC_NOERR){printf("Error at %s:%d : %s\n", __FILE__,__LINE__, ncmpi_strerror(err));nerrs++;}}
-
+#define SOURCE_NAME "/pscratch/sd/y/yll6162/FS_2M_32/new_format_test_all_256.pnc"
 static void
 usage(char *argv0)
 {
@@ -168,7 +168,7 @@ int main(int argc, char** argv)
                       MPI_Finalize();
                       return 1;
         }
-    if (argv[optind] == NULL) strcpy(filename, "new_format_test_all.pnc");
+    if (argv[optind] == NULL) strcpy(filename, SOURCE_NAME);
     else                      snprintf(filename, 256, "%s", argv[optind]);
 
     MPI_Bcast(filename, 256, MPI_CHAR, 0, MPI_COMM_WORLD);

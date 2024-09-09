@@ -27,9 +27,9 @@ static int verbose;
 
 #define ERR {if(err!=NC_NOERR){printf("Error at %s:%d : %s\n", __FILE__,__LINE__, ncmpi_strerror(err));nerrs++;}}
 
-#define SOURCE_NAME "save_input_test_all_output"
+#define SOURCE_NAME "/pscratch/sd/y/yll6162/FS_2M_32/save_input_test_all"
 // #define SOURCE_NAME "/files2/scratch/yll6162/parallel_metadata/script/dummy_test.nc"
-#define OUTPUT_NAME "new_format_test_all.pnc"
+#define OUTPUT_NAME "/pscratch/sd/y/yll6162/FS_2M_32/new_format_test_all.pnc"
 
 double def_start_time;
 double total_def_time = 0;
@@ -253,8 +253,12 @@ int main(int argc, char *argv[]) {
     MPI_Info_create(&info);
     MPI_Info_set(info, "nc_hash_size_dim", "4096");
     MPI_Info_set(info, "nc_hash_size_var", "4096");
-    err = ncmpi_create(MPI_COMM_WORLD, OUTPUT_NAME, cmode, info, &ncid); ERR
-    MPI_Barrier(MPI_COMM_WORLD);
+
+    snprintf(filename, sizeof(filename), "%.*s_%d.pnc", 
+            (int)(sizeof(OUTPUT_NAME) - 5), OUTPUT_NAME, nproc);
+    err = ncmpi_create(MPI_COMM_WORLD, filename, cmode, info, &ncid); ERR
+    double create_time = MPI_Wtime() - start_time;
+    // MPI_Barrier(MPI_COMM_WORLD);
 
     // printf("rank %d, recv_displs: %d, recvcounts: %d \n",  rank, recv_displs[i], recvcounts[i]);
     int nvars = all_hdr.vars.ndefined;
@@ -271,13 +275,13 @@ int main(int argc, char *argv[]) {
     io_time = MPI_Wtime() - start_time1;
     
     
-    MPI_Barrier(MPI_COMM_WORLD);
+    // MPI_Barrier(MPI_COMM_WORLD);
     start_time2 = MPI_Wtime();
     err = ncmpi_enddef(ncid); ERR
     enddef_time = MPI_Wtime() - start_time2;
 
     // Clean up
-    MPI_Barrier(MPI_COMM_WORLD);
+    // MPI_Barrier(MPI_COMM_WORLD);
     start_time3 = MPI_Wtime();
     err = ncmpi_close(ncid); ERR
     end_time =  MPI_Wtime();
@@ -286,13 +290,13 @@ int main(int argc, char *argv[]) {
     free_hdr(&all_hdr);
 
 
-    double times[5] = {end_to_end_time, io_time, enddef_time, close_time, total_def_time};
-    char *names[5] = {"end-end", "write", "enddef", "close", "def_dim/var"};
-    double max_times[5], min_times[5];
+    double times[6] = {end_to_end_time, create_time,  io_time, enddef_time, close_time, total_def_time};
+    char *names[6] = {"end-end", "create", "write", "enddef", "close", "def_dim/var"};
+    double max_times[6], min_times[6];
 
-    MPI_Reduce(&times[0], &max_times[0], 5, MPI_DOUBLE, MPI_MAX, 0, MPI_COMM_WORLD);
-    MPI_Reduce(&times[0], &min_times[0], 5, MPI_DOUBLE, MPI_MIN, 0, MPI_COMM_WORLD);
-    for (int i = 0; i < 5; i++) {
+    MPI_Reduce(&times[0], &max_times[0], 6, MPI_DOUBLE, MPI_MAX, 0, MPI_COMM_WORLD);
+    MPI_Reduce(&times[0], &min_times[0], 6, MPI_DOUBLE, MPI_MIN, 0, MPI_COMM_WORLD);
+    for (int i = 0; i < 6; i++) {
         if (rank == 0) {
             printf("Max %s time: %f seconds\n", names[i], max_times[i]);
             printf("Min %s time: %f seconds\n", names[i], min_times[i]);
