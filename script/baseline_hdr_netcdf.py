@@ -5,10 +5,14 @@ import mpi4py.MPI as MPI
 import pncpy as pnc
 import os
 import sys
+
+ncopy = 10
+
 zero_dim_ct = 0
 dim_ct = 0
 var_ct = 0
 start_time_1 = 0
+
 # run_time_2 = 0
 def test_consistency_check(file_path, rank, comm):
 
@@ -39,6 +43,7 @@ def test_consistency_check(file_path, rank, comm):
 def create_metadata_nc(metadata, instance, parent_name=''):
     global zero_dim_ct
     global dim_ct
+    global var_ct
     global run_time_2
     for key, info in metadata.items():
         # Create NetCDF dimensions based on HDF5 dataset shape
@@ -72,6 +77,7 @@ def create_metadata_nc(metadata, instance, parent_name=''):
                         zero_dim_ct += 1
                 # Create NetCDF variables and copy data
                 # start_time_2 = MPI.Wtime()
+                var_ct += 1
                 ncvar = instance.def_var(item_name, dtype, dimensions=tuple(dims))
                 # end_time_2 =  MPI.Wtime()
                 # run_time_2 += end_time_2 - start_time_2
@@ -90,7 +96,7 @@ def create_metadata_nc(metadata, instance, parent_name=''):
 
 
 def store_metadata(instance, metadata):
-    global var_ct
+    # global var_ct
     for key, value in instance.attrs.items():
         att_key = f'H5A_{key}'
         metadata[att_key] = {}
@@ -104,7 +110,7 @@ def store_metadata(instance, metadata):
             if isinstance(item, h5py.Group):
                 name_key = f'H5G_{name}'
             elif isinstance(item, h5py.Dataset):
-                var_ct += 1
+                # var_ct += 1
                 name_key = f'H5D_{name}'
             metadata[name_key] = {}
             store_metadata(item, metadata[name_key])
@@ -116,14 +122,14 @@ def store_metadata(instance, metadata):
     return
 
 
-def create_ncfile_from_metadata(file_path, metadata):
+def create_ncfile_from_metadata(file_path, metadata, ncopy):
     global start_time_2
     global run_time_2
 
     with pnc.File(file_path, 'w', comm=MPI.COMM_WORLD,  format='64BIT_DATA') as file:
-        
         start_time_2 = MPI.Wtime()
-        create_metadata_nc(metadata, instance=file)
+        for i in range(ncopy):
+            create_metadata_nc(metadata, instance=file, parent_name=f'copy_{i}_')
         # start_time_2 = MPI.Wtime()
         file.enddef()
         # end_time_2 = MPI.Wtime()
@@ -161,7 +167,7 @@ def store_file_metadata_parallel(file_paths, rank, size):
                     if isinstance(item, h5py.Group):
                         name_key = f'H5G_{name}'
                     elif isinstance(item, h5py.Dataset):
-                        var_ct += 1
+                        # var_ct += 1
                         name_key = f'H5D_{name}'
                     metadata[name_key] = {}
                     store_metadata(item, metadata[name_key])
@@ -236,9 +242,9 @@ if __name__ == "__main__":
 
     # # ---------------------------------------------------- Create Metadata Collectively--------------------------------------------------
 
-    output_file_path = f"{app_file_dir.split('/')[-1]}_merged.nc"
+    output_file_path = f"{app_file_dir.split('/')[-1]}_merged_{ncopy}_copy.nc"
 
-    create_ncfile_from_metadata(output_file_path, all_metadata)
+    create_ncfile_from_metadata(output_file_path, all_metadata, ncopy)
     end_time_2 = MPI.Wtime()
     crt_time = end_time_2 - start_time_2
     min_time = comm.reduce(crt_time, op=MPI.MIN, root=0)
@@ -246,6 +252,6 @@ if __name__ == "__main__":
     if rank==0:
         print(f"Max create time: {max_time}")
         print(f"Min create time: {min_time}")
-        print(f"total dim: {dim_ct}, process variable: {var_ct}")
+        print(f"total dim: {dim_ct}, total variable: {var_ct}")
 
 

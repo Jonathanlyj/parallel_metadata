@@ -5,6 +5,7 @@ import argparse
 zero_dim_ct = 0
 dim_ct = 0
 var_ct = 0
+
 def copy_attributes(source, destination):
     for attr_name, attr_value in source.attrs.items():
         destination.put_att(attr_name, attr_value)
@@ -49,8 +50,8 @@ def hdf5_to_netcdf(hdf5_file, netcdf_file, use_small):
                     elif isinstance(item, h5py.Group):
                         if not use_small or hash(key) % 10 == 0:
                             convert_hdf5_to_netcdf(item, f"{parent_name}_grp_{key}_")
-
-            convert_hdf5_to_netcdf(h5file)
+            for i in range(ncopy):
+                convert_hdf5_to_netcdf(h5file, parent_name=f'copy_{i}_')
             ncfile.enddef()
     print(f"total dim: {dim_ct}, total variable: {var_ct}")
 
