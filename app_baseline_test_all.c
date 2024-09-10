@@ -15,6 +15,7 @@
 #include <mpi.h>
 #include <pnetcdf.h>
 #include "baseline_ncx_app.h" 
+#include <math.h>
 
 
 
@@ -23,10 +24,10 @@ static int verbose;
 
 #define ERR {if(err!=NC_NOERR){printf("Error at %s:%d : %s\n", __FILE__,__LINE__, ncmpi_strerror(err));nerrs++;}}
 
-#define FILE_NAME "/global/homes/y/yll6162/parallel_metadata/data/nue_slice_panoptic_hdf_merged.nc"
-// #define FILE_NAME "/files2/scratch/yll6162/parallel_metadata/script/dummy_test.nc"
-#define OUTPUT_NAME "/pscratch/sd/y/yll6162/FS_2M_32/app_baseline_test_all.nc"
-// #define FILE_NAME "testfile.nc"
+// #define FILE_NAME "/global/homes/y/yll6162/parallel_metadata/data/nue_slice_panoptic_hdf_merged.nc"
+#define FILE_NAME "/files2/scratch/yll6162/parallel_metadata/script/nue_slice_panoptic_hdf_merged_10_copy.nc"
+// #define OUTPUT_NAME "/pscratch/sd/y/yll6162/FS_2M_32/app_baseline_test_all.nc"
+#define OUTPUT_NAME "app_baseline_test_all.nc"
 
 double def_start_time, total_def_time=0;
 /*----< pnetcdf_check_mem_usage() >------------------------------------------*/
@@ -367,8 +368,8 @@ int main(int argc, char *argv[]) {
     deserialize_all_hdr(all_recv_hdr, all_collections_buffer, recv_displs, recvcounts, nproc);
     MPI_Info info = MPI_INFO_NULL;
     MPI_Info_create(&info);
-    MPI_Info_set(info, "nc_hash_size_dim", "4096");
-    MPI_Info_set(info, "nc_hash_size_var", "4096");
+    MPI_Info_set(info, "nc_hash_size_dim", "16777216");
+    MPI_Info_set(info, "nc_hash_size_var", "16777216");
     err = ncmpi_create(MPI_COMM_WORLD, OUTPUT_NAME, cmode, info, &ncid); ERR
     MPI_Info_free(&info);
     MPI_Barrier(MPI_COMM_WORLD);

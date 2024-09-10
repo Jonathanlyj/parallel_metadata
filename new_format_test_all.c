@@ -27,9 +27,11 @@ static int verbose;
 
 #define ERR {if(err!=NC_NOERR){printf("Error at %s:%d : %s\n", __FILE__,__LINE__, ncmpi_strerror(err));nerrs++;}}
 
-#define SOURCE_NAME "/pscratch/sd/y/yll6162/FS_2M_32/save_input_test_all"
+// #define SOURCE_NAME "/pscratch/sd/y/yll6162/FS_2M_32/save_input_test_all"
+#define SOURCE_NAME "save_input_test_all_10_copy"
 // #define SOURCE_NAME "/files2/scratch/yll6162/parallel_metadata/script/dummy_test.nc"
-#define OUTPUT_NAME "/pscratch/sd/y/yll6162/FS_2M_32/new_format_test_all.pnc"
+// #define OUTPUT_NAME "/pscratch/sd/y/yll6162/FS_2M_32/new_format_test_all.pnc"
+#define OUTPUT_NAME "new_format_test_all_10_copy.pnc"
 
 double def_start_time;
 double total_def_time = 0;
@@ -251,8 +253,8 @@ int main(int argc, char *argv[]) {
     start_time = MPI_Wtime();
     MPI_Info info = MPI_INFO_NULL;
     MPI_Info_create(&info);
-    MPI_Info_set(info, "nc_hash_size_dim", "4096");
-    MPI_Info_set(info, "nc_hash_size_var", "4096");
+    MPI_Info_set(info, "nc_hash_size_dim", "16777216");
+    MPI_Info_set(info, "nc_hash_size_var", "16777216");
 
     snprintf(filename, sizeof(filename), "%.*s_%d.pnc", 
             (int)(sizeof(OUTPUT_NAME) - 5), OUTPUT_NAME, nproc);

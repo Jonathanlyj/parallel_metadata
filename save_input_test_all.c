@@ -23,10 +23,13 @@ static int verbose;
 
 #define ERR {if(err!=NC_NOERR){printf("Error at %s:%d : %s\n", __FILE__,__LINE__, ncmpi_strerror(err));nerrs++;}}
 
-#define FILE_NAME "/global/homes/y/yll6162/parallel_metadata/data/nue_slice_panoptic_hdf_merged.nc"
+// #define FILE_NAME "/global/homes/y/yll6162/parallel_metadata/data/nue_slice_panoptic_hdf_merged.nc"
+#define FILE_NAME "/files2/scratch/yll6162/parallel_metadata/script/nue_slice_panoptic_hdf_merged_10_copy.nc"
 // #define FILE_NAME "/files2/scratch/yll6162/parallel_metadata/script/local_hdr_test.nc"
-#define OUTPUT_NAME "/pscratch/sd/y/yll6162/FS_2M_32/save_input_test_all"
+// #define OUTPUT_NAME "/pscratch/sd/y/yll6162/FS_2M_32/save_input_test_all"
 // #define FILE_NAME "testfile.nc"
+#define OUTPUT_NAME "save_input_test_all_10_copy"
+
 
 double def_start_time, total_def_time=0;
 /*----< pnetcdf_check_mem_usage() >------------------------------------------*/
