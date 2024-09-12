@@ -254,7 +254,7 @@ int main(int argc, char *argv[]) {
     MPI_Info info = MPI_INFO_NULL;
     MPI_Info_create(&info);
     MPI_Info_set(info, "nc_hash_size_dim", "16777216");
-    MPI_Info_set(info, "nc_hash_size_var", "16777216");
+    MPI_Info_set(info, "nc_hash_size_var", "8388608");
 
     snprintf(filename, sizeof(filename), "%.*s_%d.pnc", 
             (int)(sizeof(OUTPUT_NAME) - 5), OUTPUT_NAME, nproc);

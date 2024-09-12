@@ -40,6 +40,7 @@ pnetcdf_check_mem_usage(MPI_Comm comm)
     MPI_Comm_rank(comm, &rank);
     /* print info about PnetCDF internal malloc usage */
     err = ncmpi_inq_malloc_max_size(&malloc_size);
+    
     if (err == NC_NOERR) {
         MPI_Reduce(&malloc_size, &sum_size, 1, MPI_OFFSET, MPI_SUM, 0, MPI_COMM_WORLD);
         if (rank == 0)
@@ -369,7 +370,7 @@ int main(int argc, char *argv[]) {
     MPI_Info info = MPI_INFO_NULL;
     MPI_Info_create(&info);
     MPI_Info_set(info, "nc_hash_size_dim", "16777216");
-    MPI_Info_set(info, "nc_hash_size_var", "16777216");
+    MPI_Info_set(info, "nc_hash_size_var", "8388608");
     err = ncmpi_create(MPI_COMM_WORLD, OUTPUT_NAME, cmode, info, &ncid); ERR
     MPI_Info_free(&info);
     MPI_Barrier(MPI_COMM_WORLD);
