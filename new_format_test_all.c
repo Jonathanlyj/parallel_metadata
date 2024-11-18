@@ -28,10 +28,10 @@ static int verbose;
 #define ERR {if(err!=NC_NOERR){printf("Error at %s:%d : %s\n", __FILE__,__LINE__, ncmpi_strerror(err));nerrs++;}}
 
 // #define SOURCE_NAME "/pscratch/sd/y/yll6162/FS_2M_32/save_input_test_all"
-#define SOURCE_NAME "save_input_test_all_10_copy"
+#define SOURCE_NAME "/pscratch/sd/y/yll6162/FS_2M_8/save_input_test_all_10_copy"
 // #define SOURCE_NAME "/files2/scratch/yll6162/parallel_metadata/script/dummy_test.nc"
 // #define OUTPUT_NAME "/pscratch/sd/y/yll6162/FS_2M_32/new_format_test_all.pnc"
-#define OUTPUT_NAME "new_format_test_all_10_copy.pnc"
+#define OUTPUT_NAME "/pscratch/sd/y/yll6162/FS_2M_8/new_format_test_all_10_copy.pnc"
 
 double def_start_time;
 double total_def_time = 0;
@@ -206,7 +206,7 @@ int main(int argc, char *argv[]) {
     MPI_Init(&argc, &argv);
     int rank, nproc, status, err, nerrs=0;
     double end_time, start_time, start_time1, end_time1, start_time2, start_time3, max_time, min_time;
-    double io_time, enddef_time, close_time, end_to_end_time;
+    double metadata_time, enddef_time, close_time, end_to_end_time;
     MPI_Comm_rank(MPI_COMM_WORLD, &rank);
     MPI_Comm_size(MPI_COMM_WORLD, &nproc);
     struct hdr all_hdr;
@@ -272,18 +272,19 @@ int main(int argc, char *argv[]) {
     // if (rank == 0) 
     //     printf("\ntotal var: %d", nvars);
     // printf("\nrank %d, start %d, count %d\n", rank, start, count);
+    MPI_Barrier(MPI_COMM_WORLD);
     start_time1 = MPI_Wtime();
     define_hdr_nf(&all_hdr, ncid, rank, start, count);
-    io_time = MPI_Wtime() - start_time1;
+    metadata_time = MPI_Wtime() - start_time1;
     
     
-    // MPI_Barrier(MPI_COMM_WORLD);
+    MPI_Barrier(MPI_COMM_WORLD);
     start_time2 = MPI_Wtime();
     err = ncmpi_enddef(ncid); ERR
     enddef_time = MPI_Wtime() - start_time2;
 
     // Clean up
-    // MPI_Barrier(MPI_COMM_WORLD);
+    MPI_Barrier(MPI_COMM_WORLD);
     start_time3 = MPI_Wtime();
     err = ncmpi_close(ncid); ERR
     end_time =  MPI_Wtime();
@@ -291,10 +292,11 @@ int main(int argc, char *argv[]) {
     end_to_end_time = end_time - start_time;
     free_hdr(&all_hdr);
 
-
-    double times[6] = {end_to_end_time, create_time,  io_time, enddef_time, close_time, total_def_time};
-    char *names[6] = {"end-end", "create", "write", "enddef", "close", "def_dim/var"};
+    // printf("\nRank %d: enddef_time: %f, close_time: %f", rank, enddef_time, close_time);
+    double times[6] = {end_to_end_time, create_time,  metadata_time, enddef_time, close_time, total_def_time};
+    char *names[6] = {"end-end", "create", "metadata-create", "enddef", "close", "def_dim/var"};
     double max_times[6], min_times[6];
+
 
     MPI_Reduce(&times[0], &max_times[0], 6, MPI_DOUBLE, MPI_MAX, 0, MPI_COMM_WORLD);
     MPI_Reduce(&times[0], &min_times[0], 6, MPI_DOUBLE, MPI_MIN, 0, MPI_COMM_WORLD);

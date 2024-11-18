@@ -24,10 +24,11 @@ static int verbose;
 #define ERR {if(err!=NC_NOERR){printf("Error at %s:%d : %s\n", __FILE__,__LINE__, ncmpi_strerror(err));nerrs++;}}
 
 // #define SOURCE_NAME "/global/homes/y/yll6162/parallel_metadata/data/nue_slice_panoptic_hdf_merged.nc"
-#define SOURCE_NAME "/files2/scratch/yll6162/parallel_metadata/script/nue_slice_panoptic_hdf_merged_10_copy.nc"
+#define SOURCE_NAME "/pscratch/sd/y/yll6162/FS_2M_8/nue_slice_panoptic_hdf_merged_10_copy.nc"
 // #define SOURCE_NAME "/files2/scratch/yll6162/parallel_metadata/script/dummy_test.nc"
+#define OUTPUT_NAME "/pscratch/sd/y/yll6162/FS_2M_8/lib_baseline_test_all.nc"
 // #define OUTPUT_NAME "/pscratch/sd/y/yll6162/FS_2M_32/lib_baseline_test_all.nc"
- #define OUTPUT_NAME "lib_baseline_test_all.nc"
+//  #define OUTPUT_NAME "lib_baseline_test_all.nc"
 
 double def_start_time;
 double total_def_time = 0;
@@ -261,7 +262,7 @@ int main(int argc, char *argv[]) {
     MPI_Init(&argc, &argv);
     int rank, size, status, err, nerrs=0;
     double end_time, start_time, start_time1, end_time1, start_time2, start_time3, max_time, min_time;
-    double io_time, enddef_time, close_time, end_to_end_time;
+    double meta_create_time, enddef_time, close_time, end_to_end_time;
     MPI_Comm_rank(MPI_COMM_WORLD, &rank);
     MPI_Comm_size(MPI_COMM_WORLD, &size);
     struct hdr local_hdr;
@@ -283,8 +284,10 @@ int main(int argc, char *argv[]) {
     start_time = MPI_Wtime();
     MPI_Info info = MPI_INFO_NULL;
     MPI_Info_create(&info);
+    // MPI_Info_set(info, "nc_hash_size_dim", "4096");
+    // MPI_Info_set(info, "nc_hash_size_var", "4096");
     MPI_Info_set(info, "nc_hash_size_dim", "16777216");
-    MPI_Info_set(info, "nc_hash_size_var", "8388608");
+    MPI_Info_set(info, "nc_hash_size_var", "8388608");  
     err = ncmpi_create(MPI_COMM_WORLD, OUTPUT_NAME, cmode, info, &ncid); ERR
     MPI_Barrier(MPI_COMM_WORLD);
 
@@ -292,7 +295,7 @@ int main(int argc, char *argv[]) {
 
     start_time1 = MPI_Wtime();
     define_hdr(&local_hdr, ncid, rank);
-    io_time = MPI_Wtime() - start_time1;
+    meta_create_time = MPI_Wtime() - start_time1;
     
     
     MPI_Barrier(MPI_COMM_WORLD);
@@ -310,8 +313,8 @@ int main(int argc, char *argv[]) {
     // free_hdr(&local_hdr);
 
 
-    double times[5] = {end_to_end_time, io_time, enddef_time, close_time, total_def_time};
-    char *names[5] = {"end-end", "write", "enddef", "close", "def_dim/var"};
+    double times[5] = {end_to_end_time, meta_create_time, enddef_time, close_time, total_def_time};
+    char *names[5] = {"end-end", "metadata-create", "enddef", "close", "def_dim/var"};
     double max_times[5], min_times[5];
 
     MPI_Reduce(&times[0], &max_times[0], 5, MPI_DOUBLE, MPI_MAX, 0, MPI_COMM_WORLD);
