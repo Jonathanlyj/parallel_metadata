@@ -1,9 +1,9 @@
-PNETCDF_DIR=/files2/scratch/yll6162/PnetCDF-meta/PnetCDF-install
-PNETCDF_DIR_LIBBASE=/files2/scratch/yll6162/PnetCDF-meta/PnetCDF-sort-install
-PNETCDF_DIR_FORMAT=/files2/scratch/yll6162/PnetCDF-meta/PnetCDF-format-install
-# PNETCDF_DIR=/global/homes/y/yll6162/pnetcdf/pnetcdf-install
-# PNETCDF_DIR_LIBBASE=/global/homes/y/yll6162/pnetcdf-meta/pnetcdf-sort-install
-# PNETCDF_DIR_FORMAT=/global/homes/y/yll6162/pnetcdf-meta/pnetcdf-format-install
+# PNETCDF_DIR=/files2/scratch/yll6162/PnetCDF-meta/PnetCDF-install
+# PNETCDF_DIR=/files2/scratch/yll6162/pnetcdf/PnetCDF-install
+# PNETCDF_DIR=/files2/scratch/yll6162/PnetCDF-meta/PnetCDF-sort-install
+# PNETCDF_DIR=/files2/scratch/yll6162/PnetCDF-meta/PnetCDF-format-install
+# PNETCDF_DIR=/homes/yll6162/PnetCDF_meta/PnetCDF-install
+PNETCDF_DIR=/files2/scratch/yll6162/PnetCDF-meta/PnetCDF-lib-install
 
 CC = mpicc
 H5CC = h5pcc
@@ -62,8 +62,8 @@ lib_level_baseline_test_read: lib_level_baseline_test_read.o $(PNETCDF_DIR_LIBBA
 lib_level_baseline_test_dup_name: lib_level_baseline_test_dup_name.o $(PNETCDF_DIR_LIBBASE)/lib/libpnetcdf.a
 	$(CC) $(CFLAGS) $(INCLUDES_LIBBASE) $(LFLAGS_LIBBASE) -o $@ $^ $(LIBS)
 
-lib_baseline_test_all: lib_baseline_test_all.o baseline_ncx_lib.o $(PNETCDF_DIR_LIBBASE)/lib/libpnetcdf.a
-	$(CC) $(CFLAGS) $(INCLUDES_LIBBASE) $(LFLAGS_LIBBASE) -o $@ $^ $(LIBS)
+lib_baseline_test_all: lib_baseline_test_all.o baseline_ncx_lib.o $(PNETCDF_DIR)/lib/libpnetcdf.a
+	$(CC) $(CFLAGS) $(INCLUDES) $(LFLAGS) -o $@ $^ $(LIBS)
 
 new_format_create_simple: new_format_create_simple.o $(PNETCDF_DIR_FORMAT)/lib/libpnetcdf.a
 	$(CC) $(CFLAGS) $(INCLUDES_FORMAT) $(LFLAGS_FORMAT) -o $@ $^ $(LIBS)
