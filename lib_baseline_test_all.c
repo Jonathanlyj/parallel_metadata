@@ -333,7 +333,7 @@ int main(int argc, char *argv[]) {
     start_time1 = MPI_Wtime();
     define_hdr(&local_hdr, ncid, rank);
     io_time = MPI_Wtime() - start_time1;
-    
+    meta_free_hdr(&local_hdr);
     // pnetcdf_check_crt_mem(MPI_COMM_WORLD, 0);
     MPI_Barrier(MPI_COMM_WORLD);
     start_time2 = MPI_Wtime();
@@ -347,7 +347,7 @@ int main(int argc, char *argv[]) {
     end_time =  MPI_Wtime();
     close_time = end_time - start_time3;
     end_to_end_time = end_time - start_time;
-    // free_hdr(&local_hdr);
+    
     // pnetcdf_check_crt_mem(MPI_COMM_WORLD, 2);
 
     double times[5] = {end_to_end_time, io_time, enddef_time, close_time, total_def_time};
