@@ -1,9 +1,9 @@
-# PNETCDF_DIR=/files2/scratch/yll6162/PnetCDF-meta/PnetCDF-install
+PNETCDF_DIR=/files2/scratch/yll6162/PnetCDF-meta/PnetCDF-install
 # PNETCDF_DIR=/files2/scratch/yll6162/pnetcdf/PnetCDF-install
 # PNETCDF_DIR=/files2/scratch/yll6162/PnetCDF-meta/PnetCDF-sort-install
-# PNETCDF_DIR=/files2/scratch/yll6162/PnetCDF-meta/PnetCDF-format-install
+PNETCDF_DIR_FORMAT=/files2/scratch/yll6162/PnetCDF-meta/PnetCDF-format-install
 # PNETCDF_DIR=/homes/yll6162/PnetCDF_meta/PnetCDF-install
-PNETCDF_DIR=/files2/scratch/yll6162/PnetCDF-meta/PnetCDF-lib-install
+PNETCDF_DIR_LIBBASE=/files2/scratch/yll6162/PnetCDF-meta/PnetCDF-lib-install
 
 CC = mpicc
 H5CC = h5pcc
@@ -28,21 +28,20 @@ all: baseline_test baseline_ex1 app_baseline_test_all pnc_consist_check $(LIB_PR
 %.o: %.c
 	$(CC) $(CFLAGS) $(INCLUDES) -c $< -o $@
 
-lib_level%.o: lib_level%.c
+lib_%.o: lib_%.c
 	$(CC) $(CFLAGS) $(INCLUDES_LIBBASE) -c $< -o $@
 
 new_format_%.o: new_format_%.c
 	$(CC) $(CFLAGS) $(INCLUDES_FORMAT) -c $< -o $@
 
-new_format_test_all.o: new_format_test_all.c
-	$(CC) $(CFLAGS) $(INCLUDES_FORMAT) -c $< -o $@
+
 
 baseline_test: baseline_test.o baseline_ncx_app.o
 	$(CC) $(CFLAGS) $(INCLUDES) $(LFLAGS) -o $@ $^ $(LIBS)
 baseline_ex1: baseline_ex1.o baseline_ncx_app.o
 	$(CC) $(CFLAGS) $(INCLUDES) $(LFLAGS) -o $@ $^ $(LIBS)
 
-app_baseline_test_all: app_baseline_test_all.o baseline_ncx_app.o
+app_baseline_test_all: app_baseline_test_all.o baseline_ncx_app.o $(PNETCDF_DIR)/lib/libpnetcdf.a
 	$(CC) $(CFLAGS) $(INCLUDES) $(LFLAGS) -o $@ $^ $(LIBS)
 
 app_baseline_read_test_all: app_baseline_read_test_all.o baseline_ncx_app.o
@@ -62,13 +61,16 @@ lib_level_baseline_test_read: lib_level_baseline_test_read.o $(PNETCDF_DIR_LIBBA
 lib_level_baseline_test_dup_name: lib_level_baseline_test_dup_name.o $(PNETCDF_DIR_LIBBASE)/lib/libpnetcdf.a
 	$(CC) $(CFLAGS) $(INCLUDES_LIBBASE) $(LFLAGS_LIBBASE) -o $@ $^ $(LIBS)
 
-lib_baseline_test_all: lib_baseline_test_all.o baseline_ncx_lib.o $(PNETCDF_DIR)/lib/libpnetcdf.a
-	$(CC) $(CFLAGS) $(INCLUDES) $(LFLAGS) -o $@ $^ $(LIBS)
+lib_baseline_test_all: lib_baseline_test_all.o baseline_ncx_lib.o $(PNETCDF_DIR_LIBBASE)/lib/libpnetcdf.a
+	$(CC) $(CFLAGS) $(INCLUDES_LIBBASE) $(LFLAGS_LIBBASE) -o $@ $^ $(LIBS)
 
 new_format_create_simple: new_format_create_simple.o $(PNETCDF_DIR_FORMAT)/lib/libpnetcdf.a
 	$(CC) $(CFLAGS) $(INCLUDES_FORMAT) $(LFLAGS_FORMAT) -o $@ $^ $(LIBS)
 
 new_format_create_large: new_format_create_large.o $(PNETCDF_DIR_FORMAT)/lib/libpnetcdf.a
+	$(CC) $(CFLAGS) $(INCLUDES_FORMAT) $(LFLAGS_FORMAT) -o $@ $^ $(LIBS)
+
+new_format_create_conflict_blk: new_format_create_conflict_blk.o $(PNETCDF_DIR_FORMAT)/lib/libpnetcdf.a
 	$(CC) $(CFLAGS) $(INCLUDES_FORMAT) $(LFLAGS_FORMAT) -o $@ $^ $(LIBS)
 
 new_format_create_diff: new_format_create_diff.o $(PNETCDF_DIR_FORMAT)/lib/libpnetcdf.a

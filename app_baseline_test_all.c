@@ -24,8 +24,8 @@ static int verbose;
 
 #define ERR {if(err!=NC_NOERR){printf("Error at %s:%d : %s\n", __FILE__,__LINE__, ncmpi_strerror(err));nerrs++;}}
 
-// #define FILE_NAME "/global/homes/y/yll6162/parallel_metadata/data/nue_slice_panoptic_hdf_merged.nc"
-#define FILE_NAME "/files2/scratch/yll6162/parallel_metadata/script/nue_slice_panoptic_hdf_merged_10_copy.nc"
+#define FILE_NAME "/files2/scratch/yll6162/parallel_metadata/nue_slice_panoptic_hdf_merged.nc"
+// #define FILE_NAME "/files2/scratch/yll6162/parallel_metadata/script/nue_slice_panoptic_hdf_merged_10_copy.nc"
 // #define OUTPUT_NAME "/pscratch/sd/y/yll6162/FS_2M_32/app_baseline_test_all.nc"
 #define OUTPUT_NAME "app_baseline_test_all.nc"
 
@@ -37,15 +37,22 @@ pnetcdf_check_mem_usage(MPI_Comm comm)
 {
     int err, nerrs=0, rank;
     MPI_Offset malloc_size, sum_size;
+
     MPI_Comm_rank(comm, &rank);
+
     /* print info about PnetCDF internal malloc usage */
     err = ncmpi_inq_malloc_max_size(&malloc_size);
-    
     if (err == NC_NOERR) {
         MPI_Reduce(&malloc_size, &sum_size, 1, MPI_OFFSET, MPI_SUM, 0, MPI_COMM_WORLD);
-        if (rank == 0)
-            printf("maximum heap memory allocated by PnetCDF internally is %lld bytes (%.2f MB)\n",
+        if (rank == 0){
+            printf("total maximum heap memory allocated by PnetCDF internally is %lld bytes (%.2f MB)\n",
                    sum_size, (float)sum_size /1048576);
+            printf("rank 0 maximum heap memory allocated by PnetCDF internally is %lld bytes (%.2f MB)\n",
+                   malloc_size, (float)malloc_size /1048576);
+        }else if (rank == 1){
+            printf("rank 1 maximum heap memory allocated by PnetCDF internally is %lld bytes (%.2f MB)\n",
+                   malloc_size, (float)malloc_size /1048576);
+        }
     }
     else if (err != NC_ENOTENABLED) {
         printf("Error at %s:%d: %s\n", __FILE__,__LINE__,ncmpi_strerror(err));
@@ -54,6 +61,36 @@ pnetcdf_check_mem_usage(MPI_Comm comm)
     return nerrs;
 }
 
+
+/* check PnetCDF library internal memory usage */
+static int
+pnetcdf_check_crt_mem(MPI_Comm comm, int checkpoint)
+{
+    int err, nerrs=0, rank;
+    MPI_Offset malloc_size, sum_size;
+
+    MPI_Comm_rank(comm, &rank);
+
+    /* print info about PnetCDF internal malloc usage */
+    err = ncmpi_inq_malloc_size(&malloc_size);
+    if (err == NC_NOERR) {
+        MPI_Reduce(&malloc_size, &sum_size, 1, MPI_OFFSET, MPI_SUM, 0, MPI_COMM_WORLD);
+        if (rank == 0){
+            printf("checkpoint %d: total current heap memory allocated by PnetCDF internally is %lld bytes (%.2f MB)\n",
+                   checkpoint, (float)sum_size /1048576);
+            printf("checkpoint %d: rank 0 current heap memory allocated by PnetCDF internally is %lld bytes (%.2f MB)\n",
+                   checkpoint, malloc_size, (float)malloc_size /1048576);
+        }else if (rank == 1){
+            printf("checkpoint %d: rank 1 current heap memory allocated by PnetCDF internally is %lld bytes (%.2f MB)\n",
+                   checkpoint, malloc_size, (float)malloc_size /1048576);
+        }
+    }
+    else if (err != NC_ENOTENABLED) {
+        printf("Error at %s:%d: %s\n", __FILE__,__LINE__,ncmpi_strerror(err));
+        nerrs++;
+    }
+    return nerrs;
+}
 
 /* ---------------------------------- Read Metadata ----------------------------------------*/
 
@@ -198,7 +235,7 @@ void read_metadata(int rank, int nproc, struct hdr *file_info) {
 
     // Close the NetCDF file
     ncmpi_close(ncid);
-    pnetcdf_check_mem_usage(MPI_COMM_WORLD);
+    // pnetcdf_check_mem_usage(MPI_COMM_WORLD);
 }
 
 /* ---------------------------------- Decode Metadata ----------------------------------------*/
@@ -369,8 +406,8 @@ int main(int argc, char *argv[]) {
     deserialize_all_hdr(all_recv_hdr, all_collections_buffer, recv_displs, recvcounts, nproc);
     MPI_Info info = MPI_INFO_NULL;
     MPI_Info_create(&info);
-    MPI_Info_set(info, "nc_hash_size_dim", "16777216");
-    MPI_Info_set(info, "nc_hash_size_var", "8388608");
+    MPI_Info_set(info, "nc_hash_size_dim", "4096");
+    MPI_Info_set(info, "nc_hash_size_var", "4096");
     err = ncmpi_create(MPI_COMM_WORLD, OUTPUT_NAME, cmode, info, &ncid); ERR
     MPI_Info_free(&info);
     MPI_Barrier(MPI_COMM_WORLD);
@@ -384,12 +421,14 @@ int main(int argc, char *argv[]) {
     //     define_hdr(recv_hdr, ncid, rank);
     //     free_hdr(recv_hdr);
     // }
+    // pnetcdf_check_crt_mem(MPI_COMM_WORLD, 0);
     io_time = MPI_Wtime() - end_time1;
     free_all_hdr(all_recv_hdr, nproc);
     end_time2 = MPI_Wtime();
     err = ncmpi_enddef(ncid); ERR
     end_time3 = MPI_Wtime();
     enddef_time = end_time3 - end_time2;
+    // pnetcdf_check_crt_mem(MPI_COMM_WORLD, 1);
 
     // Clean up
     free(send_buffer);
@@ -403,6 +442,7 @@ int main(int argc, char *argv[]) {
     close_time = end_time - end_time3;
     end_to_end_time = end_time - start_time;
     mpi_time = end_time1 - start_time1;
+    // pnetcdf_check_crt_mem(MPI_COMM_WORLD, 2);
 
     double times[6] = {end_to_end_time, mpi_time, io_time, enddef_time, total_def_time, close_time};
     char *names[6] = {"end-end", "mpi-phase", "write", "enddef", "def_dim/var", "close"};

@@ -28,10 +28,10 @@ static int verbose;
 #define ERR {if(err!=NC_NOERR){printf("Error at %s:%d : %s\n", __FILE__,__LINE__, ncmpi_strerror(err));nerrs++;}}
 
 // #define SOURCE_NAME "/pscratch/sd/y/yll6162/FS_2M_32/save_input_test_all"
-#define SOURCE_NAME "save_input_test_all_10_copy"
+#define SOURCE_NAME "/files2/scratch/yll6162/parallel_metadata/save_input_test_all_output"
 // #define SOURCE_NAME "/files2/scratch/yll6162/parallel_metadata/script/dummy_test.nc"
 // #define OUTPUT_NAME "/pscratch/sd/y/yll6162/FS_2M_32/new_format_test_all.pnc"
-#define OUTPUT_NAME "new_format_test_all_10_copy.pnc"
+#define OUTPUT_NAME "/files2/scratch/yll6162/parallel_metadata/new_format_test_all.pnc"
 
 double def_start_time;
 double total_def_time = 0;
