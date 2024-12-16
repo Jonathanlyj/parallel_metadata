@@ -1,7 +1,7 @@
 # PNETCDF_DIR=/files2/scratch/yll6162/PnetCDF-meta/PnetCDF-install
 # PNETCDF_DIR_LIBSORT=/files2/scratch/yll6162/PnetCDF-meta/PnetCDF-sort-install
 # PNETCDF_DIR_FORMAT=/files2/scratch/yll6162/PnetCDF-meta/PnetCDF-format-install
-PNETCDF_DIR=/global/homes/y/yll6162/pnetcdf/pnetcdf-install
+PNETCDF_DIR=/global/homes/y/yll6162/pnetcdf-meta/pnetcdf-install
 PNETCDF_DIR_LIBBASE=/global/homes/y/yll6162/pnetcdf-meta/pnetcdf-lib-install
 PNETCDF_DIR_LIBSORT=/global/homes/y/yll6162/pnetcdf-meta/pnetcdf-sort-install
 PNETCDF_DIR_FORMAT=/global/homes/y/yll6162/pnetcdf-meta/pnetcdf-format-install
@@ -10,6 +10,7 @@ CC = mpicc
 H5CC = h5pcc
 
 CFLAGS = -O2
+# CFLAGS = -O0 -g
 INCLUDES = -I$(PNETCDF_DIR)/include
 INCLUDES_LIBSORT = -I$(PNETCDF_DIR_LIBSORT)/include
 INCLUDES_LIBBASE = -I$(PNETCDF_DIR_LIBBASE)/include
@@ -91,6 +92,9 @@ new_format_read_test_all: new_format_read_test_all.o baseline_ncx_app.o $(PNETCD
 	
 h5_baseline_test_all: h5_baseline_test_all.o
 	$(H5CC) $(CFLAGS) -o $@ $^ 
+
+mpi_io_test: mpi_io_test.o
+	$(CC) $(CFLAGS) -o $@ $^
 
 h5_%.o: h5_%.c
 	$(H5CC) $(CFLAGS) $(INCLUDES) -c $< -o $@

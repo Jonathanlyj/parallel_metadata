@@ -15,6 +15,7 @@
 #include <mpi.h>
 #include <pnetcdf.h>
 #include "baseline_ncx_lib.h"
+#include <malloc.h>
 
 
 
@@ -23,8 +24,8 @@ static int verbose;
 
 #define ERR {if(err!=NC_NOERR){printf("Error at %s:%d : %s\n", __FILE__,__LINE__, ncmpi_strerror(err));nerrs++;}}
 
-// #define SOURCE_NAME "/global/homes/y/yll6162/parallel_metadata/data/nue_slice_panoptic_hdf_merged.nc"
-#define SOURCE_NAME "/pscratch/sd/y/yll6162/FS_2M_8/nue_slice_panoptic_hdf_merged_10_copy.nc"
+#define SOURCE_NAME "/global/homes/y/yll6162/parallel_metadata/data/nue_slice_panoptic_hdf_merged.nc"
+// #define SOURCE_NAME "/pscratch/sd/y/yll6162/FS_2M_8/nue_slice_panoptic_hdf_merged_10_copy.nc"
 // #define SOURCE_NAME "/files2/scratch/yll6162/parallel_metadata/script/dummy_test.nc"
 #define OUTPUT_NAME "/pscratch/sd/y/yll6162/FS_2M_8/lib_baseline_test_all.nc"
 // #define OUTPUT_NAME "/pscratch/sd/y/yll6162/FS_2M_32/lib_baseline_test_all.nc"
@@ -58,10 +59,20 @@ pnetcdf_check_mem_usage(MPI_Comm comm)
     return nerrs;
 }
 
+
+void print_memory_info() {
+    struct mallinfo info = mallinfo();
+    printf("\nMemory Allocation Info:\n");
+    printf("Total space in arena: %zu bytes (%.2f MB) \n", info.arena, (double)info.arena /1048576);
+    printf("Total allocated space: %zu bytes (%.2f MB)\n", info.uordblks, (double)info.uordblks /1048576);
+    printf("Total free space: %zu bytes (%.2f MB)\n", info.fordblks, (double)info.fordblks /1048576); 
+    printf("Largest free block: %zu bytes (%.2f MB)\n", info.keepcost, (double)info.keepcost /1048576);
+    printf("------------------------------------\n");
+}
 /* ---------------------------------- Read Metadata ----------------------------------------*/
 
 
-void read_metdata(int rank, int size, struct hdr *file_info) {
+void read_metadata(int rank, int size, struct hdr *file_info) {
 
     int ncid, num_vars, num_dims, tot_num_dims, elem_sz, v_attrV_xsz, status;
 
@@ -100,6 +111,7 @@ void read_metdata(int rank, int size, struct hdr *file_info) {
     file_info->vars.ndefined = count;
     file_info->vars.value = (hdr_var **)malloc(file_info->vars.ndefined * sizeof(hdr_var *));
     // Each process reads its subset of variables
+
     for (int i = start; i < start + count; ++i) {
         // Get variable information
         hdr_var *variable_info = (hdr_var *)malloc(sizeof(hdr_var));
@@ -149,13 +161,17 @@ void read_metdata(int rank, int size, struct hdr *file_info) {
         for (int k = 0; k < num_dims; ++k) {
             hdr_dim *dimension_info = (hdr_dim *)malloc(sizeof(hdr_dim));
             int dimid = variable_info->dimids[k];
+ 
+                
             // Get dimension name
             char dim_name[NC_MAX_NAME + 1];
             ncmpi_inq_dimname(ncid, dimid, dim_name);
             dimension_info->name_len = strlen(dim_name);
             dimension_info->name = (char *)malloc((dimension_info->name_len + 1) * sizeof(char));
             strcpy(dimension_info->name, dim_name);
-
+            // if (i - start <3){
+            //     printf("rank:%d varid: %d, dimid: %d, dimname: %s\n", rank, i, dimid, dim_name);
+            // }   
             // Get dimension size
             ncmpi_inq_dimlen(ncid, dimid, &(dimension_info->size));
 
@@ -265,10 +281,11 @@ int main(int argc, char *argv[]) {
     double meta_create_time, enddef_time, close_time, end_to_end_time;
     MPI_Comm_rank(MPI_COMM_WORLD, &rank);
     MPI_Comm_size(MPI_COMM_WORLD, &size);
+
     struct hdr local_hdr;
     // struct hdr recv_hdr;
     // create_dummy_data(rank, &dummy);
-    read_metdata(rank, size, &local_hdr);
+    read_metadata(rank, size, &local_hdr);
 
     
 
@@ -287,7 +304,9 @@ int main(int argc, char *argv[]) {
     // MPI_Info_set(info, "nc_hash_size_dim", "4096");
     // MPI_Info_set(info, "nc_hash_size_var", "4096");
     MPI_Info_set(info, "nc_hash_size_dim", "16777216");
-    MPI_Info_set(info, "nc_hash_size_var", "8388608");  
+    MPI_Info_set(info, "nc_hash_size_var", "8388608"); 
+    // MPI_Info_set(info, "nc_hash_size_dim", "2097152");
+    // MPI_Info_set(info, "nc_hash_size_var", "1048576"); 
     err = ncmpi_create(MPI_COMM_WORLD, OUTPUT_NAME, cmode, info, &ncid); ERR
     MPI_Barrier(MPI_COMM_WORLD);
 
@@ -297,7 +316,7 @@ int main(int argc, char *argv[]) {
     define_hdr(&local_hdr, ncid, rank);
     meta_create_time = MPI_Wtime() - start_time1;
     
-    
+    meta_free_hdr(&local_hdr);
     MPI_Barrier(MPI_COMM_WORLD);
     start_time2 = MPI_Wtime();
     err = ncmpi_enddef(ncid); ERR
@@ -305,12 +324,13 @@ int main(int argc, char *argv[]) {
 
     // Clean up
     MPI_Barrier(MPI_COMM_WORLD);
+    // print_memory_info();
     start_time3 = MPI_Wtime();
     err = ncmpi_close(ncid); ERR
     end_time =  MPI_Wtime();
     close_time = end_time - start_time3;
     end_to_end_time = end_time - start_time;
-    // free_hdr(&local_hdr);
+    
 
 
     double times[5] = {end_to_end_time, meta_create_time, enddef_time, close_time, total_def_time};

@@ -28,10 +28,11 @@ static int verbose;
 #define ERR {if(err!=NC_NOERR){printf("Error at %s:%d : %s\n", __FILE__,__LINE__, ncmpi_strerror(err));nerrs++;}}
 
 // #define SOURCE_NAME "/pscratch/sd/y/yll6162/FS_2M_32/save_input_test_all"
-#define SOURCE_NAME "/pscratch/sd/y/yll6162/FS_2M_8/save_input_test_all_10_copy"
+// #define SOURCE_NAME "/pscratch/sd/y/yll6162/FS_2M_8/save_input_test_all_10_copy"
+ #define SOURCE_NAME "/pscratch/sd/y/yll6162/FS_2M_8/save_input_test_all_output"
 // #define SOURCE_NAME "/files2/scratch/yll6162/parallel_metadata/script/dummy_test.nc"
-// #define OUTPUT_NAME "/pscratch/sd/y/yll6162/FS_2M_32/new_format_test_all.pnc"
-#define OUTPUT_NAME "/pscratch/sd/y/yll6162/FS_2M_8/new_format_test_all_10_copy.pnc"
+#define OUTPUT_NAME "/pscratch/sd/y/yll6162/FS_2M_8/new_format_test_all.pnc"
+// #define OUTPUT_NAME "/pscratch/sd/y/yll6162/FS_2M_8/new_format_test_all_10_copy.pnc"
 
 double def_start_time;
 double total_def_time = 0;
@@ -304,6 +305,12 @@ int main(int argc, char *argv[]) {
         if (rank == 0) {
             printf("Max %s time: %f seconds\n", names[i], max_times[i]);
             printf("Min %s time: %f seconds\n", names[i], min_times[i]);
+        }
+    }
+    for (int i = 0; i < 5; i++) {
+        if (rank == 0) {
+            printf("%f \n", max_times[i]);
+            printf("%f \n", min_times[i]);
         }
     }
     pnetcdf_check_mem_usage(MPI_COMM_WORLD);

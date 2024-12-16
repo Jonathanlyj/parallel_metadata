@@ -16,6 +16,7 @@
 #include <pnetcdf.h>
 #include "baseline_ncx_app.h" 
 #include <math.h>
+#include <malloc.h>
 
 
 
@@ -26,6 +27,8 @@ static int verbose;
 
 // #define FILE_NAME "/global/homes/y/yll6162/parallel_metadata/data/nue_slice_panoptic_hdf_merged.nc"
 #define FILE_NAME "/pscratch/sd/y/yll6162/FS_2M_8/nue_slice_panoptic_hdf_merged_10_copy.nc"
+// #define FILE_NAME "/pscratch/sd/y/yll6162/FS_2M_8/app_baseline_test_all.nc"
+// #define FILE_NAME "/pscratch/sd/y/yll6162/FS_2M_8/lib_baseline_test_all.nc"
 #define OUTPUT_NAME "/pscratch/sd/y/yll6162/FS_2M_8/app_baseline_test_all.nc"
 // #define OUTPUT_NAME "app_baseline_test_all.nc"
 
@@ -54,7 +57,15 @@ pnetcdf_check_mem_usage(MPI_Comm comm)
     return nerrs;
 }
 
-
+void print_memory_info() {
+    struct mallinfo info = mallinfo();
+    printf("\nMemory Allocation Info:\n");
+    printf("Total space in arena: %zu bytes (%.2f MB) \n", info.arena, (double)info.arena /1048576);
+    printf("Total allocated space: %zu bytes (%.2f MB)\n", info.uordblks, (double)info.uordblks /1048576);
+    printf("Total free space: %zu bytes (%.2f MB)\n", info.fordblks, (double)info.fordblks /1048576); 
+    printf("Largest free block: %zu bytes (%.2f MB)\n", info.keepcost, (double)info.keepcost /1048576);
+    printf("------------------------------------\n");
+}
 /* ---------------------------------- Read Metadata ----------------------------------------*/
 
 void read_metadata(int rank, int nproc, struct hdr *file_info) {
@@ -141,12 +152,16 @@ void read_metadata(int rank, int nproc, struct hdr *file_info) {
         for (int k = 0; k < num_dims; ++k) {
             hdr_dim *dimension_info = (hdr_dim *)malloc(sizeof(hdr_dim));
             int dimid = variable_info->dimids[k];
+
             // Get dimension name
             char dim_name[NC_MAX_NAME + 1];
             ncmpi_inq_dimname(ncid, dimid, dim_name);
             dimension_info->name_len = strlen(dim_name);
             dimension_info->name = (char *)malloc((dimension_info->name_len + 1) * sizeof(char));
             strcpy(dimension_info->name, dim_name);
+            // if (i - start <3){
+            //     printf("rank:%d varid: %d, dimid: %d, dimname: %s\n", rank, i, dimid, dim_name);
+            // }   
 
             // Get dimension size
             ncmpi_inq_dimlen(ncid, dimid, &(dimension_info->size));
@@ -371,6 +386,8 @@ int main(int argc, char *argv[]) {
     MPI_Info_create(&info);
     MPI_Info_set(info, "nc_hash_size_dim", "16777216");
     MPI_Info_set(info, "nc_hash_size_var", "8388608");
+    // MPI_Info_set(info, "nc_hash_size_dim", "2097152");
+    // MPI_Info_set(info, "nc_hash_size_var", "1048576"); 
     err = ncmpi_create(MPI_COMM_WORLD, OUTPUT_NAME, cmode, info, &ncid); ERR
     MPI_Info_free(&info);
     MPI_Barrier(MPI_COMM_WORLD);
@@ -397,6 +414,7 @@ int main(int argc, char *argv[]) {
     free(all_collection_sizes);
     free(recv_displs);
     MPI_Barrier(MPI_COMM_WORLD);
+    print_memory_info();
     end_time3 = MPI_Wtime();
     err = ncmpi_close(ncid); ERR
     end_time = MPI_Wtime();

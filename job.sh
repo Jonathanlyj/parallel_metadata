@@ -1,7 +1,7 @@
 #!/bin/bash
 
 #SBATCH -A m844
-#SBATCH -t 00:5:00
+#SBATCH -t 00:15:00
 #SBATCH -N 1
 #SBATCH -C cpu
 #SBATCH --qos=debug
@@ -22,15 +22,20 @@ NP=$((NUM_NODES * SLURM_NTASKS_PER_NODE))
 
 ulimit -c unlimited
 
-# EXE=/global/homes/y/yll6162/parallel_metadata/lib_baseline_test_all
+EXE=/global/homes/y/yll6162/parallel_metadata/lib_baseline_test_all
 # EXE=/global/homes/y/yll6162/parallel_metadata/save_input_test_all
 # EXE=/global/homes/y/yll6162/parallel_metadata/app_baseline_read_test_all
 # EXE=/global/homes/y/yll6162/parallel_metadata/app_baseline_test_all
-EXE=/global/homes/y/yll6162/parallel_metadata/new_format_test_all
+# EXE=/global/homes/y/yll6162/parallel_metadata/new_format_test_all
+# EXE=/global/homes/y/yll6162/parallel_metadata/mpi_io_test
+# EXE=/global/homes/y/yll6162/parallel_metadata/free_timer
+# EXE=/global/homes/y/yll6162/parallel_metadata/interleave_free_timer
+# EXE=/global/homes/y/yll6162/parallel_metadata/sequential_free_timer
 SB_EXE=/tmp/${USER}_test #tmp all users shared
 sbcast -v ${EXE} ${SB_EXE} #executable copy to this position
 # export LD_LIBRARY_PATH="/global/homes/y/yll6162/pnetcdf/pnetcdf-install/lib:$LD_LIBRARY_PATH"
 # export PNETCDF_HINTS="nc_hash_size_dim=4096;nc_hash_size_var=4096"
 # export PNETCDF_HINTS="nc_hash_size_dim=16777216;nc_hash_size_var=8388608"
 srun -n $NP -c $((256/$SLURM_NTASKS_PER_NODE)) --cpu_bind=cores ${SB_EXE} 
+# srun -n $NP -c $((256/$SLURM_NTASKS_PER_NODE)) --cpu_bind=cores ${SB_EXE} -s 98 -c
 #srun python ...

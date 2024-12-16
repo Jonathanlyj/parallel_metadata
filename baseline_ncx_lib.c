@@ -93,7 +93,7 @@ void meta_free_hdr(struct hdr *header) {
         meta_free_hdr_dimarray(&(header->dims));
         // free_hdr_attrarray(&(header->attrs));
         meta_free_hdr_vararray(&(header->vars));
-        free(header);
+        // free(header);
     }
 }
 
