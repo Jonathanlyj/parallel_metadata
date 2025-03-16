@@ -6,7 +6,7 @@ import pncpy as pnc
 import os
 import sys
 
-ncopy = 10
+ncopy = 1
 
 zero_dim_ct = 0
 dim_ct = 0
@@ -178,26 +178,31 @@ def exchange_metadata(metadata, rank, size):
     global var_ct
 
     comm = MPI.COMM_WORLD
-    # Serialize
-    buffer = pickle.dumps(metadata)
-    send_count = len(buffer)
+    # # Serialize
+    # buffer = pickle.dumps(metadata)
+    # send_count = len(buffer)
 
-    send_counts = comm.allgather(send_count)
-    # Determine the displacement for each process
-    send_displacements = np.cumsum(send_counts) - send_counts
-    # Gather data from all processes
-    all_metadata_buff = np.empty(sum(send_counts), dtype='S1')
-    if rank == 0: 
-        print(f"Total size: {sum(send_counts)/(1024 * 1024)} MB")
-        print(f"Max size: {max(send_counts)/(1024 * 1024)} MB")
-        print(f"Min size: {min(send_counts)/(1024 * 1024)} MB")
-        print(f"rank 0 n_vars: {var_ct}")
-    comm.Allgatherv(buffer, [all_metadata_buff, send_counts, send_displacements, MPI.CHAR])
-    # Deserialize
+    # send_counts = comm.allgather(send_count)
+    # # Determine the displacement for each process
+    # send_displacements = np.cumsum(send_counts) - send_counts
+    # # Gather data from all processes
+    # all_metadata_buff = np.empty(sum(send_counts), dtype='S1')
+    # if rank == 0: 
+    #     print(f"Total size: {sum(send_counts)/(1024 * 1024)} MB")
+    #     print(f"Max size: {max(send_counts)/(1024 * 1024)} MB")
+    #     print(f"Min size: {min(send_counts)/(1024 * 1024)} MB")
+    #     print(f"rank 0 n_vars: {var_ct}")
+    # comm.Allgatherv(buffer, [all_metadata_buff, send_counts, send_displacements, MPI.CHAR])
+    # # Deserialize
+    # all_metadata = {}
+    # for i in range(size):
+    #     meta = pickle.loads(all_metadata_buff[send_displacements[i]:send_displacements[i] + send_counts[i]])
+    #     all_metadata.update(meta)
     all_metadata = {}
-    for i in range(size):
-        meta = pickle.loads(all_metadata_buff[send_displacements[i]:send_displacements[i] + send_counts[i]])
-        all_metadata.update(meta)
+    metadata_list = comm.allgather(metadata)
+    for local_metadata in metadata_list:
+        all_metadata.update(local_metadata)
+
     return all_metadata
 
 
@@ -242,8 +247,8 @@ if __name__ == "__main__":
 
     # # ---------------------------------------------------- Create Metadata Collectively--------------------------------------------------
 
-    output_file_path = f"{app_file_dir.split('/')[-1]}_merged_{ncopy}_copy.nc"
-
+    # output_file_path = f"{app_file_dir.split('/')[-1]}_merged_{ncopy}_copy.nc"
+    output_file_path = f"{app_file_dir.split('/')[-1]}_merged_{ncopy}_copy_tmp.nc"
     create_ncfile_from_metadata(output_file_path, all_metadata, ncopy)
     end_time_2 = MPI.Wtime()
     crt_time = end_time_2 - start_time_2
