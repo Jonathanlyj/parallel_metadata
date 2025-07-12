@@ -8,11 +8,14 @@
 
 
 
-#define SRC_FILE "/pscratch/sd/y/yll6162/FS_2M_32/nue_slice_panoptic_hdf_merged_meta.h5"
+// #define SRC_FILE "/pscratch/sd/y/yll6162/FS_2M_32/nue_slice_panoptic_hdf_merged_meta.h5"
+#define SRC_FILE "/global/homes/y/yll6162/parallel_metadata/data/nue_slice_panoptic_hdf_merged_meta.h5"
 // #define SRC_FILE "/files2/scratch/yll6162/parallel_metadata/script/nue_slice_graphs.0001_new.h5"
 // #define SRC_FILE "h5_example.h5"
-#define OUT_FILE "/pscratch/sd/y/yll6162/FS_4M_32/h5_baseline_test_all.h5"
+// #define OUT_FILE "/pscratch/sd/y/yll6162/FS_4M_32/h5_baseline_test_all.h5"
+#define OUT_FILE "/pscratch/sd/y/yll6162/FS_2M_64/h5_baseline_test_all.h5"
 #define FAIL -1
+// #define DIRTY_BYTES_THRESHOLD (1024 * 1024) // 64 kb
 double crt_start_time, total_crt_time=0;
 // Define a structure to represent a dataset
 typedef struct {
@@ -385,16 +388,16 @@ void create_metadata(h5_grouparray* local_meta, hid_t file_id) {
     for (int i = 0; i < local_meta->ngrps; i++) {
         h5_group* group = local_meta->groups[i];
         // Create a group in the HDF5 file
-        // crt_start_time = MPI_Wtime();
-        // group_id = H5Gcreate2(file_id, group->name, H5P_DEFAULT, H5P_DEFAULT, H5P_DEFAULT);
-        // total_crt_time += MPI_Wtime() - crt_start_time;
+        crt_start_time = MPI_Wtime();
+        group_id = H5Gcreate2(file_id, group->name, H5P_DEFAULT, H5P_DEFAULT, H5P_DEFAULT);
+        total_crt_time += MPI_Wtime() - crt_start_time;
 
         // Iterate over each dataset in the group
         for (int j = 0; j < group->ndst; j++) {
             h5_dataset* dataset = group->datasets[j];
-            char* flat_dataset_name = (char*)malloc(strlen(group->name) + strlen(dataset->name) + 2);
-            strcpy(flat_dataset_name, group->name);
-            strcat(flat_dataset_name, dataset->name);
+            // char* flat_dataset_name = (char*)malloc(strlen(group->name) + strlen(dataset->name) + 2);
+            // strcpy(flat_dataset_name, group->name);
+            // strcat(flat_dataset_name, dataset->name);
             // Create dataspace
             dataspace_id = H5Sdecode(dataset->dspace);
             // Create datatypes
@@ -406,7 +409,8 @@ void create_metadata(h5_grouparray* local_meta, hid_t file_id) {
             // // Turn off auto-fill for the dataset
             status = H5Pset_fill_time(dcpl_id, H5D_FILL_TIME_NEVER);
             crt_start_time = MPI_Wtime();
-            dataset_id = H5Dcreate(file_id, flat_dataset_name, datatype_id, dataspace_id, H5P_DEFAULT, dcpl_id, H5P_DEFAULT);
+            // dataset_id = H5Dcreate(file_id, flat_dataset_name, datatype_id, dataspace_id, H5P_DEFAULT, dcpl_id, H5P_DEFAULT);
+            dataset_id = H5Dcreate(group_id, dataset->name, datatype_id, dataspace_id, H5P_DEFAULT, dcpl_id, H5P_DEFAULT);
             total_crt_time += MPI_Wtime() - crt_start_time;
 
             // check storage space allocated
@@ -423,7 +427,7 @@ void create_metadata(h5_grouparray* local_meta, hid_t file_id) {
         }
 
         // Close the group
-        // H5Gclose(group_id);
+        H5Gclose(group_id);
     }
 }
 
@@ -512,15 +516,40 @@ int main(int argc, char *argv[]) {
     // deserialize_grouparray(new_meta, send_buffer);
     MPI_Barrier(MPI_COMM_WORLD);
     end_time1 = MPI_Wtime();
-    block_size = 64 * 1024 * 1024;
+    block_size = 4 * 1024 * 1024;
+    unsigned ik = 32;
+    unsigned lk = 5;
     fcpl_id = H5Pcreate(H5P_FILE_CREATE);
     // H5Pset_istore_k(fcpl_id, 1024);
+    H5Pset_sym_k(fcpl_id, ik, lk);
+    
     plist_id = H5Pcreate(H5P_FILE_ACCESS);
     H5Pset_fapl_mpio(plist_id, MPI_COMM_WORLD, MPI_INFO_NULL);
     H5Pset_coll_metadata_write(plist_id, true);
-    // H5Pset_meta_block_size(plist_id, block_size);
+    H5Pset_meta_block_size(plist_id, block_size);
+
+    //Set dirty bytes threshold
+    // H5AC_cache_config_t mdc_config;
+
+    // memset(&mdc_config, 0, sizeof(mdc_config));
+    // mdc_config.version = H5AC__CURR_CACHE_CONFIG_VERSION;
+    // H5Pget_mdc_config(plist_id, &mdc_config);
+    // Set the dirty bytes threshold, so all processes will reach sync point until this amount of matadata cache is reached. Default: 256kb
+    // mdc_config.dirty_bytes_threshold = DIRTY_BYTES_THRESHOLD;
+
+    // Apply the new configuration
+    // H5Pset_mdc_config(plist_id, &mdc_config);
+
     outfile_id = H5Fcreate(OUT_FILE, H5F_ACC_TRUNC, fcpl_id, plist_id);
+    // Initialize and retrieve current metadata cache configuration
+    // memset(&mdc_config, 0, sizeof(mdc_config));
+    // mdc_config.version = H5AC__CURR_CACHE_CONFIG_VERSION;
+    // H5Pget_mdc_config(plist_id, &mdc_config);
+    // if (rank == 0) {
+    //     printf("Dirty bytes threshold: %llu\n", (unsigned long long)mdc_config.dirty_bytes_threshold);
+    // }
     create_all_metadata(all_recv_meta, nproc, outfile_id);
+
 
 //     struct rusage r_usage;
 //     getrusage(RUSAGE_SELF,&r_usage);
@@ -546,12 +575,14 @@ int main(int argc, char *argv[]) {
 
     MPI_Reduce(&times[0], &max_times[0], 5, MPI_DOUBLE, MPI_MAX, 0, MPI_COMM_WORLD);
     MPI_Reduce(&times[0], &min_times[0], 5, MPI_DOUBLE, MPI_MIN, 0, MPI_COMM_WORLD);
-    // for (int i = 0; i < 5; i++){
-    //     if (rank == 0) {
-    //         printf("Max %s time: %f seconds\n", names[i], max_times[i]);
-    //         printf("Min %s time: %f seconds\n", names[i], min_times[i]);
-    //     }
-    // }
+    if (rank == 0) printf("ik: %u, lk: %u\n", ik, lk);
+    for (int i = 0; i < 5; i++){
+        if (rank == 0) {
+            
+            printf("Max %s time: %f seconds\n", names[i], max_times[i]);
+            printf("Min %s time: %f seconds\n", names[i], min_times[i]);
+        }
+    }
     for (int i = 0; i < 5; i++){
         if (rank == 0) {
             printf("%f\n", names[i], max_times[i]);
