@@ -21,7 +21,7 @@
 static int verbose;
 
 #define ERR {if(err!=NC_NOERR){printf("Error at %s:%d : %s\n", __FILE__,__LINE__, ncmpi_strerror(err));nerrs++;}}
-#define SOURCE_NAME "/pscratch/sd/y/yll6162/FS_2M_32/app_baseline_test_all.nc"
+#define SOURCE_NAME "/pscratch/sd/y/yll6162/FS_2M_64/app_baseline_test_all_10_copy.nc"
 static void
 usage(char *argv0)
 {
@@ -55,9 +55,13 @@ pnetcdf_io(MPI_Comm comm, char *filename, int cmode)
     
     double total_read_time = 0;
     double read_start_time = MPI_Wtime();
+    double open_time = 0.0, inq_time = 0.0;
+    double open_end, inq_end, open_start, inq_start;
     /* open the newly created file for read only -----------------------------*/
+    open_start = MPI_Wtime();
     err = ncmpi_open(MPI_COMM_WORLD, filename, NC_NOWRITE, MPI_INFO_NULL, &ncid);
     ERR
+    open_time += MPI_Wtime() - open_start;
 
 
     /* read the block name & block id*/
@@ -69,7 +73,7 @@ pnetcdf_io(MPI_Comm comm, char *filename, int cmode)
     MPI_Offset var_size = 1;
 
 
-
+    inq_start = MPI_Wtime();
     err = ncmpi_inq(ncid, NULL, &ndims, &nvars, NULL);
     ERR;
    for (varid = 0; varid < nvars; varid++){
@@ -86,7 +90,8 @@ pnetcdf_io(MPI_Comm comm, char *filename, int cmode)
         free(dim_sizes);
         free(v_dimids);
     }
-
+    inq_end = MPI_Wtime();
+    inq_time += inq_end - inq_start;
 
 
     // total_read_time += MPI_Wtime() - read_start_time;
@@ -130,6 +135,8 @@ pnetcdf_io(MPI_Comm comm, char *filename, int cmode)
     if (rank == 0) {
         printf("Max read time: %f seconds\n",  max_time);
         printf("Min read time: %f seconds\n", min_time);
+        printf("Open time: %f seconds\n", open_time);
+        printf("Inq time: %f seconds\n", inq_time);
     }
 
     return nerrs;

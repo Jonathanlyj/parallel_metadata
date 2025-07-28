@@ -27,12 +27,13 @@ static int verbose;
 
 #define ERR {if(err!=NC_NOERR){printf("Error at %s:%d : %s\n", __FILE__,__LINE__, ncmpi_strerror(err));nerrs++;}}
 
-// #define SOURCE_NAME "/pscratch/sd/y/yll6162/FS_2M_32/save_input_test_all"
+
 // #define SOURCE_NAME "/pscratch/sd/y/yll6162/FS_2M_8/save_input_test_all_10_copy"
  #define SOURCE_NAME "/pscratch/sd/y/yll6162/FS_2M_8/save_input_test_all_output"
 // #define SOURCE_NAME "/files2/scratch/yll6162/parallel_metadata/script/dummy_test.nc"
-#define OUTPUT_NAME "/pscratch/sd/y/yll6162/FS_2M_8/new_format_test_all.pnc"
-// #define OUTPUT_NAME "/pscratch/sd/y/yll6162/FS_2M_8/new_format_test_all_10_copy.pnc"
+// #define OUTPUT_NAME "/pscratch/sd/y/yll6162/FS_2M_8/new_format_test_all_1_copy.pnc"
+// #define OUTPUT_NAME "/pscratch/sd/y/yll6162/FS_2M_64/new_format_test_all_10_copy.pnc"
+#define OUTPUT_NAME "/pscratch/sd/y/yll6162/FS_2M_64/new_format_test_all_1_copy.pnc"
 
 double def_start_time;
 double total_def_time = 0;
@@ -207,7 +208,7 @@ int main(int argc, char *argv[]) {
     MPI_Init(&argc, &argv);
     int rank, nproc, status, err, nerrs=0;
     double end_time, start_time, start_time1, end_time1, start_time2, start_time3, max_time, min_time;
-    double metadata_time, enddef_time, close_time, end_to_end_time;
+    double define_time, enddef_time, close_time, end_to_end_time;
     MPI_Comm_rank(MPI_COMM_WORLD, &rank);
     MPI_Comm_size(MPI_COMM_WORLD, &nproc);
     struct hdr all_hdr;
@@ -254,8 +255,10 @@ int main(int argc, char *argv[]) {
     start_time = MPI_Wtime();
     MPI_Info info = MPI_INFO_NULL;
     MPI_Info_create(&info);
-    MPI_Info_set(info, "nc_hash_size_dim", "16777216");
-    MPI_Info_set(info, "nc_hash_size_var", "8388608");
+    // MPI_Info_set(info, "nc_hash_size_dim", "16777216");
+    // MPI_Info_set(info, "nc_hash_size_var", "8388608");
+    // MPI_Info_set(info, "nc_hash_size_var", "4096");
+    // MPI_Info_set(info, "nc_hash_size_dim", "4096");
 
     snprintf(filename, sizeof(filename), "%.*s_%d.pnc", 
             (int)(sizeof(OUTPUT_NAME) - 5), OUTPUT_NAME, nproc);
@@ -273,10 +276,10 @@ int main(int argc, char *argv[]) {
     // if (rank == 0) 
     //     printf("\ntotal var: %d", nvars);
     // printf("\nrank %d, start %d, count %d\n", rank, start, count);
-    MPI_Barrier(MPI_COMM_WORLD);
-    start_time1 = MPI_Wtime();
+    // MPI_Barrier(MPI_COMM_WORLD);
+    // start_time1 = MPI_Wtime();
     define_hdr_nf(&all_hdr, ncid, rank, start, count);
-    metadata_time = MPI_Wtime() - start_time1;
+    define_time = MPI_Wtime() - start_time;
     
     
     MPI_Barrier(MPI_COMM_WORLD);
@@ -294,14 +297,15 @@ int main(int argc, char *argv[]) {
     free_hdr(&all_hdr);
 
     // printf("\nRank %d: enddef_time: %f, close_time: %f", rank, enddef_time, close_time);
-    double times[6] = {end_to_end_time, create_time,  metadata_time, enddef_time, close_time, total_def_time};
-    char *names[6] = {"end-end", "create", "metadata-create", "enddef", "close", "def_dim/var"};
-    double max_times[6], min_times[6];
+    double times[5] = {end_to_end_time,  define_time, enddef_time, close_time, total_def_time};
+    char *names[5] = {"end-end", "metadata_define", "enddef", "close", "def_dim/var"};
+    double max_times[5], min_times[5];
 
 
-    MPI_Reduce(&times[0], &max_times[0], 6, MPI_DOUBLE, MPI_MAX, 0, MPI_COMM_WORLD);
-    MPI_Reduce(&times[0], &min_times[0], 6, MPI_DOUBLE, MPI_MIN, 0, MPI_COMM_WORLD);
-    for (int i = 0; i < 6; i++) {
+    MPI_Reduce(&times[0], &max_times[0], 5, MPI_DOUBLE, MPI_MAX, 0, MPI_COMM_WORLD);
+    MPI_Reduce(&times[0], &min_times[0], 5, MPI_DOUBLE, MPI_MIN, 0, MPI_COMM_WORLD);
+    if (rank==0) printf("output file: %s\n", filename); 
+    for (int i = 0; i < 5; i++) {
         if (rank == 0) {
             printf("Max %s time: %f seconds\n", names[i], max_times[i]);
             printf("Min %s time: %f seconds\n", names[i], min_times[i]);
@@ -310,7 +314,6 @@ int main(int argc, char *argv[]) {
     for (int i = 0; i < 5; i++) {
         if (rank == 0) {
             printf("%f \n", max_times[i]);
-            printf("%f \n", min_times[i]);
         }
     }
     pnetcdf_check_mem_usage(MPI_COMM_WORLD);

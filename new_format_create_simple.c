@@ -39,6 +39,7 @@ usage(char *argv0)
 static int
 pnetcdf_io(MPI_Comm comm, char *filename, int cmode)
 {
+
     int i, j, rank, nprocs, err, nerrs=0;
     int ncid, varid, blkid, dimid[2];
     char str_att[128];
@@ -48,6 +49,8 @@ pnetcdf_io(MPI_Comm comm, char *filename, int cmode)
 
     MPI_Comm_rank(comm, &rank);
     MPI_Comm_size(comm, &nprocs);
+    if (rank==0)
+        printf("\n rank %d: task start", rank);
 
     /* create a new file for writing ----------------------------------------*/
     cmode |= NC_CLOBBER;
@@ -70,7 +73,7 @@ pnetcdf_io(MPI_Comm comm, char *filename, int cmode)
 
     /* define dimensions x and y */
     char str_y[20];
-    char str_blk[20];
+    char str_blk[30];
     // char shared_y[20];
     // char shared_x[20];
     char str_x[20];
@@ -90,18 +93,22 @@ pnetcdf_io(MPI_Comm comm, char *filename, int cmode)
         for (j=0; j<global_nx; j++)
             buf[i][j] = rank + 1;
     sprintf(var_rank, "var_rank_%d", rank);
+    if (rank==0)
+        printf("\n rank %d: before def var", rank);
 
     err = ncmpi_def_var(ncid, blkid, var_rank, NC_INT, 2, dimid, &varid); ERR
     err = ncmpi_enddef(ncid); ERR
 
-
+    if (rank==0)
+        printf("\n rank %d: after ncmpi_enddef", rank);
     err = ncmpi_put_var_int_all(ncid, blkid, varid,  &buf[0][0]); ERR
     
 
 
     MPI_Barrier(comm);
     err = ncmpi_close(ncid); ERR
-
+    if (rank==0)
+        printf("\n rank %d: after close", rank);
     // printf("\n rank %d: after file close", rank);
     return nerrs;
 }

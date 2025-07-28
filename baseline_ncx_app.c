@@ -568,7 +568,7 @@ void free_hdr_attrarray(hdr_attrarray *attrs) {
             }
             free(attrs->value);
             attrs->value = NULL;
-            free(attrs);
+            // free(attrs);
         }
     }
 }

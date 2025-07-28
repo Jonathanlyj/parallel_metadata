@@ -21,7 +21,7 @@
 static int verbose;
 
 #define ERR {if(err!=NC_NOERR){printf("Error at %s:%d : %s\n", __FILE__,__LINE__, ncmpi_strerror(err));nerrs++;}}
-#define SOURCE_NAME "/pscratch/sd/y/yll6162/FS_2M_32/new_format_test_all_256.pnc"
+#define SOURCE_NAME "/pscratch/sd/y/yll6162/FS_2M_64/new_format_test_all_512.pnc"
 static void
 usage(char *argv0)
 {
@@ -53,11 +53,15 @@ pnetcdf_io(MPI_Comm comm, char *filename, int cmode)
     MPI_Comm_size(comm, &nprocs);
 
     
-    double total_read_time = 0;
+    double total_read_time = 0.0;
+    double open_time = 0.0, inq_time = 0.0;
+    double open_end, inq_end, open_start, inq_start;
     double read_start_time = MPI_Wtime();
+    int var_ct = 0, dim_ct = 0;
     /* open the newly created file for read only -----------------------------*/
     err = ncmpi_open(MPI_COMM_WORLD, filename, NC_NOWRITE, MPI_INFO_NULL, &ncid);
     ERR
+    open_time += MPI_Wtime() - read_start_time;
     /*read the number of blocks*/
     int nblocks;
     err = ncmpi_inq_nblocks(ncid, &nblocks);
@@ -76,11 +80,14 @@ pnetcdf_io(MPI_Comm comm, char *filename, int cmode)
         // err = ncmpi_inq_blockname(ncid, blkid, blk_name);
         // printf("\nBlock %d name: %s\n", blkid, blk_name);
         // err = ncmpi_inq_blkid(ncid, blk_name, &blkid);
+        open_start = MPI_Wtime();
         err= ncmpi_open_block(ncid, blkid);
         ERR;
+        open_time += MPI_Wtime() - open_start;
+        inq_start = MPI_Wtime();
         err = ncmpi_inq_block(ncid, blkid, NULL, &ndims, &nvars, NULL);
         ERR;
-        
+        var_ct += nvars;
         for (varid = 0; varid < nvars; varid++){
             err = ncmpi_inq_var(ncid, blkid, varid, var_name, NULL, &v_ndims, NULL, NULL);
             // printf("\nBlock %d has variable %s with %d dims\n", blkid, var_name, v_ndims);
@@ -92,9 +99,12 @@ pnetcdf_io(MPI_Comm comm, char *filename, int cmode)
                 // var_size *= dim_sizes[j];
                 // printf("\nDimension %d has size %lld\n", j, dim_sizes[j]);
             }
+            dim_ct += v_ndims;
             free(dim_sizes);
             free(v_dimids);
         }
+        inq_end = MPI_Wtime();
+        inq_time += inq_end - inq_start;
 
 
     }
@@ -139,6 +149,10 @@ pnetcdf_io(MPI_Comm comm, char *filename, int cmode)
     if (rank == 0) {
         printf("Max read time: %f seconds\n",  max_time);
         printf("Min read time: %f seconds\n", min_time);
+        printf("Open time: %f seconds\n", open_time);
+        printf("Inq time: %f seconds\n", inq_time);
+        printf("Number of variables: %d\n", var_ct);
+        printf("Number of dimensions: %d\n", dim_ct);
     }
 
     return nerrs;

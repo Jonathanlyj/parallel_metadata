@@ -7,16 +7,17 @@
 #include <sys/resource.h>
 
 
-
-// #define SRC_FILE "/pscratch/sd/y/yll6162/FS_2M_32/nue_slice_panoptic_hdf_merged_meta.h5"
+// #define SRC_FILE "/global/cfs/projectdirs/m2956/yll6162/metadata/nue_slice_panoptic_hdf_merged_meta_ncopy_10.h5"
 #define SRC_FILE "/global/homes/y/yll6162/parallel_metadata/data/nue_slice_panoptic_hdf_merged_meta.h5"
-// #define SRC_FILE "/files2/scratch/yll6162/parallel_metadata/script/nue_slice_graphs.0001_new.h5"
-// #define SRC_FILE "h5_example.h5"
+// #define SRC_FILE "/homes/yll6162/parallel_metadata/nue_slice_panoptic_hdf_merged_meta.h5"
 // #define OUT_FILE "/pscratch/sd/y/yll6162/FS_4M_32/h5_baseline_test_all.h5"
-#define OUT_FILE "/pscratch/sd/y/yll6162/FS_2M_64/h5_baseline_test_all.h5"
+#define OUT_FILE "/pscratch/sd/y/yll6162/FS_2M_64/h5_baseline_test_all_large.h5"
 #define FAIL -1
-#define DIRTY_BYTES_THRESHOLD (16 * 1024 * 1024) // 64 kb
+#define NCOPY 10
+// #define DIRTY_BYTES_THRESHOLD (1024 * 1024) // 64 kb
 double crt_start_time, total_crt_time=0;
+int group_create_count = 0;
+int dataset_create_count = 0;
 // Define a structure to represent a dataset
 typedef struct {
     int name_len;
@@ -137,12 +138,9 @@ void read_metadata(h5_grouparray* local_meta){
         new_group(group_name, strlen(group_name), ndst, local_meta->groups[i]);
         for (int j = 0; j < ndst; j++) {
             char dst_name[256];
-            local_meta->groups[i]->datasets[j] = malloc(sizeof(h5_dataset));
-            h5_dataset* dataset = local_meta->groups[i]->datasets[j];
             H5Gget_objname_by_idx(group_id, (hsize_t)j, dst_name, 256);
 
-            dst_id = H5Dopen2(group_id, dst_name, H5P_DEFAULT); 
-            // Get dataspace and datatype_id
+            dst_id = H5Dopen2(group_id, dst_name, H5P_DEFAULT);
             datatype_id = H5Dget_type(dst_id);
             status = H5Tencode(datatype_id, NULL, &dtype_size);
             dtype_tmp = malloc(dtype_size);
@@ -153,7 +151,16 @@ void read_metadata(h5_grouparray* local_meta){
             dspace_tmp = malloc(dspace_size);
             status = H5Sencode1(dataspace_id, dspace_tmp, &dspace_size);
 
-            new_dataset(dst_name, strlen(dst_name),  dtype_tmp, dtype_size, dspace_tmp, dspace_size, dataset);
+            // Create 10 copies
+            for (int k = 0; k < NCOPY; k++) {
+                char new_dst_name[300];
+                snprintf(new_dst_name, sizeof(new_dst_name), "%s_copy_%d", dst_name, k);
+
+                local_meta->groups[i]->datasets[j * NCOPY + k] = malloc(sizeof(h5_dataset));
+                h5_dataset* dataset = local_meta->groups[i]->datasets[j * 10 + k];
+                new_dataset(new_dst_name, strlen(new_dst_name), dtype_tmp, dtype_size, dspace_tmp, dspace_size, dataset);
+            }
+
             free(dtype_tmp);
             free(dspace_tmp);
 
@@ -209,17 +216,12 @@ void read_metadata_parallel(h5_grouparray* local_meta, int rank, int nproc){
         // Create a group struct and add it to the group array
 
         H5Gget_num_objs(group_id, &ndst);
-        new_group(group_name, strlen(group_name), ndst, local_meta->groups[i - start]);
-      for (int j = 0; j < ndst; j++) {
+        new_group(group_name, strlen(group_name), ndst * NCOPY, local_meta->groups[i - start]);
+        for (int j = 0; j < ndst; j++) {
             char dst_name[256];
-            h5_dataset* dataset;
-            // if (i >= start && i < start + count){
-            local_meta->groups[i - start]->datasets[j] = malloc(sizeof(h5_dataset));
-            dataset = local_meta->groups[i - start]->datasets[j];
-                // }
             H5Gget_objname_by_idx(group_id, (hsize_t)j, dst_name, 256);
-            dst_id = H5Dopen2(group_id, dst_name, H5P_DEFAULT); 
-            // Get dataspace and datatype_id
+
+            dst_id = H5Dopen2(group_id, dst_name, H5P_DEFAULT);
             datatype_id = H5Dget_type(dst_id);
             status = H5Tencode(datatype_id, NULL, &dtype_size);
             dtype_tmp = malloc(dtype_size);
@@ -230,8 +232,16 @@ void read_metadata_parallel(h5_grouparray* local_meta, int rank, int nproc){
             dspace_tmp = malloc(dspace_size);
             status = H5Sencode1(dataspace_id, dspace_tmp, &dspace_size);
 
-            // if (i >= start && i < start + count) new_dataset(dst_name, strlen(dst_name),  dtype_tmp, dtype_size, dspace_tmp, dspace_size, dataset);
-            new_dataset(dst_name, strlen(dst_name),  dtype_tmp, dtype_size, dspace_tmp, dspace_size, dataset);
+            // Create 10 copies
+            for (int k = 0; k < NCOPY; k++) {
+                char new_dst_name[300];
+                snprintf(new_dst_name, sizeof(new_dst_name), "%s_copy_%d", dst_name, k);
+
+                local_meta->groups[i - start]->datasets[j * NCOPY + k] = malloc(sizeof(h5_dataset));
+                h5_dataset* dataset = local_meta->groups[i - start]->datasets[j * NCOPY + k];
+                new_dataset(new_dst_name, strlen(new_dst_name), dtype_tmp, dtype_size, dspace_tmp, dspace_size, dataset);
+            }
+
             free(dtype_tmp);
             free(dspace_tmp);
 
@@ -390,6 +400,7 @@ void create_metadata(h5_grouparray* local_meta, hid_t file_id) {
         // Create a group in the HDF5 file
         crt_start_time = MPI_Wtime();
         group_id = H5Gcreate2(file_id, group->name, H5P_DEFAULT, H5P_DEFAULT, H5P_DEFAULT);
+        group_create_count++;
         total_crt_time += MPI_Wtime() - crt_start_time;
 
         // Iterate over each dataset in the group
@@ -405,12 +416,13 @@ void create_metadata(h5_grouparray* local_meta, hid_t file_id) {
             // Create dataset
             dcpl_id = H5Pcreate(H5P_DATASET_CREATE);
             // Set allocation time to late
-            // status = H5Pset_alloc_time(dcpl_id, H5D_ALLOC_TIME_LATE);//no effect under parallel-io mode
+            status = H5Pset_alloc_time(dcpl_id, H5D_ALLOC_TIME_LATE);//no effect under parallel-io mode
             // // Turn off auto-fill for the dataset
-            // status = H5Pset_fill_time(dcpl_id, H5D_FILL_TIME_NEVER);
+            status = H5Pset_fill_time(dcpl_id, H5D_FILL_TIME_NEVER);
             crt_start_time = MPI_Wtime();
             // dataset_id = H5Dcreate(file_id, flat_dataset_name, datatype_id, dataspace_id, H5P_DEFAULT, dcpl_id, H5P_DEFAULT);
             dataset_id = H5Dcreate(group_id, dataset->name, datatype_id, dataspace_id, H5P_DEFAULT, dcpl_id, H5P_DEFAULT);
+            dataset_create_count++;
             total_crt_time += MPI_Wtime() - crt_start_time;
 
             // check storage space allocated
@@ -518,7 +530,7 @@ int main(int argc, char *argv[]) {
     end_time1 = MPI_Wtime();
     block_size = 4 * 1024 * 1024;
     unsigned ik = 32;
-    unsigned lk = 5;
+    unsigned lk = 4;
     fcpl_id = H5Pcreate(H5P_FILE_CREATE);
     // H5Pset_istore_k(fcpl_id, 1024);
     H5Pset_sym_k(fcpl_id, ik, lk);
@@ -529,25 +541,25 @@ int main(int argc, char *argv[]) {
     H5Pset_meta_block_size(plist_id, block_size);
 
     //Set dirty bytes threshold
-    H5AC_cache_config_t mdc_config;
+    // H5AC_cache_config_t mdc_config;
 
-    memset(&mdc_config, 0, sizeof(mdc_config));
-    mdc_config.version = H5AC__CURR_CACHE_CONFIG_VERSION;
-    H5Pget_mdc_config(plist_id, &mdc_config);
+    // memset(&mdc_config, 0, sizeof(mdc_config));
+    // mdc_config.version = H5AC__CURR_CACHE_CONFIG_VERSION;
+    // H5Pget_mdc_config(plist_id, &mdc_config);
     // Set the dirty bytes threshold, so all processes will reach sync point until this amount of matadata cache is reached. Default: 256kb
-    mdc_config.dirty_bytes_threshold = DIRTY_BYTES_THRESHOLD;
+    // mdc_config.dirty_bytes_threshold = DIRTY_BYTES_THRESHOLD;
 
     // Apply the new configuration
-    H5Pset_mdc_config(plist_id, &mdc_config);
+    // H5Pset_mdc_config(plist_id, &mdc_config);
 
     outfile_id = H5Fcreate(OUT_FILE, H5F_ACC_TRUNC, fcpl_id, plist_id);
     // Initialize and retrieve current metadata cache configuration
     // memset(&mdc_config, 0, sizeof(mdc_config));
     // mdc_config.version = H5AC__CURR_CACHE_CONFIG_VERSION;
     // H5Pget_mdc_config(plist_id, &mdc_config);
-    if (rank == 0) {
-        printf("Dirty bytes threshold: %llu\n", (unsigned long long)mdc_config.dirty_bytes_threshold);
-    }
+    // if (rank == 0) {
+    //     printf("Dirty bytes threshold: %llu\n", (unsigned long long)mdc_config.dirty_bytes_threshold);
+    // }
     create_all_metadata(all_recv_meta, nproc, outfile_id);
 
 
@@ -576,6 +588,10 @@ int main(int argc, char *argv[]) {
     MPI_Reduce(&times[0], &max_times[0], 5, MPI_DOUBLE, MPI_MAX, 0, MPI_COMM_WORLD);
     MPI_Reduce(&times[0], &min_times[0], 5, MPI_DOUBLE, MPI_MIN, 0, MPI_COMM_WORLD);
     if (rank == 0) printf("ik: %u, lk: %u\n", ik, lk);
+    if (rank == 0) {
+        printf("Total groups created: %d\n", group_create_count);
+        printf("Total datasets created: %d\n", dataset_create_count);
+    }
     for (int i = 0; i < 5; i++){
         if (rank == 0) {
             
