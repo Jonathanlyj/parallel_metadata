@@ -16,22 +16,28 @@
 #include <pnetcdf.h>
 #include "baseline_ncx_app.h" 
 #include <math.h>
+#include <malloc.h>
+#include "mem_tracker.h"
 
-
+#ifdef MEM_TRACKING
+#define malloc(size) tracked_malloc(size)
+#define free(ptr)    tracked_free(ptr)
+#define realloc(ptr, size) tracked_realloc(ptr, size)
+#define strdup(s) tracked_strdup(s)
+#endif
 
 static int verbose;
 
 
 #define ERR {if(err!=NC_NOERR){printf("Error at %s:%d : %s\n", __FILE__,__LINE__, ncmpi_strerror(err));nerrs++;}}
 
-#define FILE_NAME "/files2/scratch/yll6162/parallel_metadata/nue_slice_panoptic_hdf_merged.nc"
-// #define FILE_NAME "/files2/scratch/yll6162/parallel_metadata/script/nue_slice_panoptic_hdf_merged_10_copy.nc"
-// #define OUTPUT_NAME "/pscratch/sd/y/yll6162/FS_2M_32/app_baseline_test_all.nc"
-#define OUTPUT_NAME "app_baseline_test_all.nc"
-
+const char *file_name = NULL;
+const char *output_name = NULL;
 double def_start_time, total_def_time=0;
+
 /*----< pnetcdf_check_mem_usage() >------------------------------------------*/
 /* check PnetCDF library internal memory usage */
+#ifdef MEM_TRACKING
 static int
 pnetcdf_check_mem_usage(MPI_Comm comm)
 {
@@ -47,11 +53,11 @@ pnetcdf_check_mem_usage(MPI_Comm comm)
         if (rank == 0){
             printf("total maximum heap memory allocated by PnetCDF internally is %lld bytes (%.2f MB)\n",
                    sum_size, (float)sum_size /1048576);
-            printf("rank 0 maximum heap memory allocated by PnetCDF internally is %lld bytes (%.2f MB)\n",
-                   malloc_size, (float)malloc_size /1048576);
+            // printf("rank 0 maximum heap memory allocated by PnetCDF internally is %lld bytes (%.2f MB)\n",
+            //        malloc_size, (float)malloc_size /1048576);
         }else if (rank == 1){
-            printf("rank 1 maximum heap memory allocated by PnetCDF internally is %lld bytes (%.2f MB)\n",
-                   malloc_size, (float)malloc_size /1048576);
+            // printf("rank 1 maximum heap memory allocated by PnetCDF internally is %lld bytes (%.2f MB)\n",
+            //        malloc_size, (float)malloc_size /1048576);
         }
     }
     else if (err != NC_ENOTENABLED) {
@@ -61,6 +67,31 @@ pnetcdf_check_mem_usage(MPI_Comm comm)
     return nerrs;
 }
 
+
+static int
+app_check_mem_usage(MPI_Comm comm)
+{
+    int err=0, nerrs=0, rank;
+    MPI_Offset malloc_size, sum_size;
+
+    MPI_Comm_rank(comm, &rank);
+
+    /* print info about PnetCDF internal malloc usage */
+    malloc_size = inq_max_malloc_use();
+    if (err == NC_NOERR) {
+        MPI_Reduce(&malloc_size, &sum_size, 1, MPI_OFFSET, MPI_SUM, 0, MPI_COMM_WORLD);
+        if (rank == 0){
+            printf("total maximum heap memory allocated by App internally is %lld bytes (%.2f MB)\n",
+                   sum_size, (float)sum_size /1048576);
+            // printf("rank 0 maximum heap memory allocated by App internally is %lld bytes (%.2f MB)\n",
+            //        malloc_size, (float)malloc_size /1048576);
+        }else if (rank == 1){
+            // printf("rank 1 maximum heap memory allocated by App internally is %lld bytes (%.2f MB)\n",
+            //        malloc_size, (float)malloc_size /1048576);
+        }
+    }
+    return nerrs;
+}
 
 /* check PnetCDF library internal memory usage */
 static int
@@ -77,12 +108,12 @@ pnetcdf_check_crt_mem(MPI_Comm comm, int checkpoint)
         MPI_Reduce(&malloc_size, &sum_size, 1, MPI_OFFSET, MPI_SUM, 0, MPI_COMM_WORLD);
         if (rank == 0){
             printf("checkpoint %d: total current heap memory allocated by PnetCDF internally is %lld bytes (%.2f MB)\n",
-                   checkpoint, (float)sum_size /1048576);
-            printf("checkpoint %d: rank 0 current heap memory allocated by PnetCDF internally is %lld bytes (%.2f MB)\n",
-                   checkpoint, malloc_size, (float)malloc_size /1048576);
+                   checkpoint, sum_size, (float)sum_size /1048576);
+            // printf("checkpoint %d: rank 0 current heap memory allocated by PnetCDF internally is %lld bytes (%.2f MB)\n",
+            //        checkpoint, malloc_size, (float)malloc_size /1048576);
         }else if (rank == 1){
-            printf("checkpoint %d: rank 1 current heap memory allocated by PnetCDF internally is %lld bytes (%.2f MB)\n",
-                   checkpoint, malloc_size, (float)malloc_size /1048576);
+            // printf("checkpoint %d: rank 1 current heap memory allocated by PnetCDF internally is %lld bytes (%.2f MB)\n",
+            //        checkpoint, malloc_size, (float)malloc_size /1048576);
         }
     }
     else if (err != NC_ENOTENABLED) {
@@ -92,151 +123,32 @@ pnetcdf_check_crt_mem(MPI_Comm comm, int checkpoint)
     return nerrs;
 }
 
-/* ---------------------------------- Read Metadata ----------------------------------------*/
+/* check PnetCDF library internal memory usage */
+static int
+app_check_crt_mem(MPI_Comm comm, int checkpoint)
+{
+    int err=0, nerrs=0, rank;
+    MPI_Offset malloc_size, sum_size;
 
-void read_metadata(int rank, int nproc, struct hdr *file_info) {
+    MPI_Comm_rank(comm, &rank);
 
-    int ncid, num_vars, num_dims, tot_num_dims, elem_sz, v_attrV_xsz, status;
-    MPI_Offset start, count;
-    file_info->dims.ndefined = 0;
-    file_info->attrs.ndefined = 0;
-    file_info->vars.ndefined = 0;
-    file_info->xsz = 0;
-    tot_num_dims = 0;
-    // Open the NetCDF file
-    if (ncmpi_open(MPI_COMM_WORLD, FILE_NAME, NC_NOWRITE, MPI_INFO_NULL, &ncid) != NC_NOERR) {
-        fprintf(stderr, "Error opening NetCDF file.\n");
-        MPI_Abort(MPI_COMM_WORLD, 1);
-    }
-
-    // Get the number of variables
-    if (ncmpi_inq_nvars(ncid, &num_vars) != NC_NOERR) {
-        fprintf(stderr, "Error getting the number of variables.\n");
-        ncmpi_close(ncid);
-        MPI_Abort(MPI_COMM_WORLD, 1);
-    }
-    file_info->xsz += 2 * sizeof(uint32_t); // NC_Variable and ndefined
-    file_info->xsz += 2 * sizeof(uint32_t); // NC_Dimension and nelems
-    // Calculate equal distribution of variables among processes
-    int vars_per_process = num_vars / nproc;
-    int remainder = num_vars % nproc;
-    // int remainder = num_vars % 8;    
-    // int vars_per_process = num_vars / 8;
-    // Determine start and count based on rank
-    start = rank * vars_per_process + (rank < remainder ? rank : remainder);
-    count = vars_per_process + (rank < remainder ? 1 : 0);
-    // if (rank == 0){
-    //     printf("\nNumber of variables per process: %d to %d\n", vars_per_process, vars_per_process + 1);
-    // }
-
-    file_info->vars.ndefined = count;
-    file_info->vars.value = (hdr_var **)malloc(file_info->vars.ndefined * sizeof(hdr_var *));
-    // Each process reads its subset of variables
-    for (int i = start; i < start + count; ++i) {
-        // Get variable information
-        hdr_var *variable_info = (hdr_var *)malloc(sizeof(hdr_var));
-        variable_info->ndims = 0;  // Initialize the number of dimensions
-        variable_info->attrs.ndefined = 0;  // Initialize the number of attributes
-
-        // Get variable information
-        char var_name[NC_MAX_NAME + 1];
-        ncmpi_inq_varname(ncid, i, var_name);
-        variable_info->name_len = strlen(var_name);
-        variable_info->name = (char *)malloc((variable_info->name_len + 1) * sizeof(char));
-        strcpy(variable_info->name, var_name);
-
-        // Get number of dimensions
-        ncmpi_inq_varndims(ncid, i, &(variable_info->ndims));
-        num_dims = variable_info->ndims;
-        // Allocate memory for dimension IDs
-        variable_info->dimids = (int *)malloc(variable_info->ndims * sizeof(int));
-        // Get dimension IDs
-        ncmpi_inq_vardimid(ncid, i, variable_info->dimids);
-
-        // Read attributes
-        nc_type xtype;
-        int num_attrs;
-        ncmpi_inq_var(ncid, i, NULL, &xtype, NULL, NULL, &num_attrs);
-        variable_info->attrs.ndefined = num_attrs;
-        variable_info->xtype = xtype;
-
-        file_info->xsz += sizeof(uint32_t) + sizeof(char) * variable_info -> name_len; //var name
-        file_info->xsz += sizeof(uint32_t); //xtype
-        file_info->xsz += sizeof(uint32_t); //nelems of dim list
-        file_info->xsz += sizeof(uint32_t) * variable_info ->ndims; // dimid list
-
-
-
-        //Read and store dimension information 
-        file_info->dims.ndefined += num_dims;
-        if (tot_num_dims == 0) {
-            file_info->dims.value = (hdr_dim **)malloc(file_info->dims.ndefined * sizeof(hdr_dim *));
-        }else{
-            file_info->dims.value = (hdr_dim **)realloc(file_info->dims.value, file_info->dims.ndefined * sizeof(hdr_dim *));
-        } 
-
-        for (int k = 0; k < num_dims; ++k) {
-            hdr_dim *dimension_info = (hdr_dim *)malloc(sizeof(hdr_dim));
-            int dimid = variable_info->dimids[k];
-            // Get dimension name
-            char dim_name[NC_MAX_NAME + 1];
-            ncmpi_inq_dimname(ncid, dimid, dim_name);
-            dimension_info->name_len = strlen(dim_name);
-            dimension_info->name = (char *)malloc((dimension_info->name_len + 1) * sizeof(char));
-            strcpy(dimension_info->name, dim_name);
-
-            // Get dimension size
-            ncmpi_inq_dimlen(ncid, dimid, &(dimension_info->size));
-
-            file_info->dims.value[k + tot_num_dims] = dimension_info;
-            variable_info->dimids[k] = k + tot_num_dims; //overwriting previous global dim id to local dim id
-            file_info->xsz += sizeof(uint32_t) + sizeof(char) * dimension_info -> name_len; // dim name
-            file_info->xsz += sizeof(uint32_t); //size
-
+    /* print info about PnetCDF internal malloc usage */
+    malloc_size = inq_malloc_use();
+    if (err == NC_NOERR) {
+        MPI_Reduce(&malloc_size, &sum_size, 1, MPI_OFFSET, MPI_SUM, 0, MPI_COMM_WORLD);
+        if (rank == 0){
+            printf("checkpoint %d: total current heap memory allocated by App internally is %lld bytes (%.2f MB)\n",
+                   checkpoint, sum_size, (float)sum_size /1048576);
+            // printf("checkpoint %d: rank 0 current heap memory allocated by App internally is %lld bytes (%.2f MB)\n",
+            //        checkpoint, malloc_size, (float)malloc_size /1048576);
+        }else if (rank == 1){
+            // printf("checkpoint %d: rank 1 current heap memory allocated by App internally is %lld bytes (%.2f MB)\n",
+            //        checkpoint, malloc_size, (float)malloc_size /1048576);
         }
-        tot_num_dims += num_dims;
-
-        // Allocate memory for attributes
-        file_info->xsz += 2 * sizeof(uint32_t); // NC_Attribute and ndefine
-        variable_info->attrs.value = (hdr_attr **)malloc(num_attrs * sizeof(hdr_attr *));
-        for (int j = 0; j < num_attrs; ++j) {
-            variable_info->attrs.value[j] = (hdr_attr *)malloc(sizeof(hdr_attr));
-            variable_info->attrs.value[j]->name_len = 0;  // Initialize attribute name length
-
-            // Get attribute name 
-            char att_name[NC_MAX_NAME + 1];
-            ncmpi_inq_attname(ncid, i, j, att_name);
-            variable_info->attrs.value[j]->name_len = strlen(att_name);
-            variable_info->attrs.value[j]->name = (char *)malloc(( strlen(att_name) + 1) * sizeof(char));
-            strcpy(variable_info->attrs.value[j]->name, att_name);
-
-            // Get attribute type and size
-            nc_type attr_type;
-            MPI_Offset attr_size;
-            ncmpi_inq_att(ncid, i, variable_info->attrs.value[j]->name, &attr_type, &attr_size);
-
-            // Allocate memory for attribute value and read it
-            variable_info->attrs.value[j]->xtype = attr_type;
-            variable_info->attrs.value[j]->nelems = attr_size;
-            xlen_nc_type(attr_type, &elem_sz);
-            variable_info->attrs.value[j]->xvalue = malloc(attr_size * elem_sz);
-            ncmpi_get_att(ncid, i, variable_info->attrs.value[j]->name, variable_info->attrs.value[j]->xvalue);
-
-            file_info->xsz += sizeof(uint32_t) + sizeof(char) * variable_info->attrs.value[j]->name_len; //attr name
-            file_info->xsz += sizeof(uint32_t); // nc_type
-            file_info->xsz += sizeof(uint32_t); // nelems
-            status = xlen_nc_type(variable_info->attrs.value[j]->xtype, &v_attrV_xsz);
-            file_info->xsz += variable_info->attrs.value[j]->nelems * v_attrV_xsz; // attr_value
-        }
-
-        // Add the variable information to the file_info structure
-        file_info->vars.value[i - start] = variable_info;
     }
-
-    // Close the NetCDF file
-    ncmpi_close(ncid);
-    // pnetcdf_check_mem_usage(MPI_COMM_WORLD);
+    return nerrs;
 }
+#endif
 
 /* ---------------------------------- Decode Metadata ----------------------------------------*/
 int define_hdr(struct hdr *hdr_data, int ncid){
@@ -280,15 +192,18 @@ int define_hdr(struct hdr *hdr_data, int ncid){
             err = ncmpi_put_att(ncid, varid[i],  hdr_data->vars.value[i]->attrs.value[k]->name, att_xtype, 
             att_nelems, &hdr_data->vars.value[i]->attrs.value[k]->xvalue[0]); ERR
         }
+        free(v_dimids);
 
     }
+    free(varid);
+    free(dimid);
     return nerrs;
 }
 
 static int deserialize_all_hdr(struct hdr **all_recv_hdr, char* all_collections_buffer, int* recv_displs, int* recvcounts, int nproc){
     for (int i=0; i< nproc; i++){
         all_recv_hdr[i]= (struct hdr *)malloc(sizeof(struct hdr));
-        deserialize_hdr(all_recv_hdr[i], all_collections_buffer + recv_displs[i], recvcounts[i]);
+        deserialize_hdr_meta(all_recv_hdr[i], all_collections_buffer + recv_displs[i], recvcounts[i]);
     }
     return 0;
 }
@@ -303,7 +218,7 @@ int define_all_hdr(struct hdr **all_recv_hdr, int nproc, int ncid){
 
 static int free_all_hdr(struct hdr **all_recv_hdr, int nproc){
     if (all_recv_hdr != NULL){
-        for (int i=0; i< nproc; i++) free_hdr(all_recv_hdr[i]);
+        for (int i=0; i< nproc; i++) free_hdr_meta(all_recv_hdr[i]);
         free(all_recv_hdr);
     }
     return 0;
@@ -318,10 +233,28 @@ int main(int argc, char *argv[]) {
     double start_time, start_time1, end_time1, end_time2, end_time3, end_time;
     MPI_Comm_rank(MPI_COMM_WORLD, &rank);
     MPI_Comm_size(MPI_COMM_WORLD, &nproc);
+
+    if (argc < 3) {
+        if (rank == 0)
+            fprintf(stderr, "Usage: %s <source_file> <output_file>\n", argv[0]);
+        MPI_Finalize();
+        return 1;
+    }
+    file_name = argv[1];
+    output_name = argv[2];
+
+    if (rank == 0) {
+        printf("Input file: %s\n", file_name);
+        printf("Output file: %s\n", output_name);
+    }
+    struct hdr all_hdr;
+    read_metadata_from_file(file_name, &all_hdr);
     struct hdr local_hdr;
+    distribute_metadata(rank, nproc, &all_hdr, &local_hdr);
+    free_hdr_meta(&all_hdr);
     // struct hdr recv_hdr;
     // create_local_hdr_data(rank, &local_hdr);
-    read_metadata(rank, nproc, &local_hdr);
+
    // Print the created data for each process
     // printf("\nRank %d:\n", rank);
     // printf("Total Header Size: %lld\n", local_hdr.xsz);
@@ -349,7 +282,10 @@ int main(int argc, char *argv[]) {
     MPI_Barrier(MPI_COMM_WORLD);
     start_time = start_time1 = MPI_Wtime();
     char* send_buffer = (char*) malloc(local_hdr.xsz);
-    status = serialize_hdr(&local_hdr, send_buffer);
+    status = serialize_hdr_meta(&local_hdr, send_buffer);
+
+
+    
 
 
     // Phase 1: Communicate the sizes of the header structure for each process
@@ -376,11 +312,11 @@ int main(int argc, char *argv[]) {
     double total_recv_size_MB = total_recv_size / (1024.0 * 1024.0);
     double min_size_MB = min_size / (1024.0 * 1024.0);
     double max_size_MB = max_size / (1024.0 * 1024.0);
-    // if(rank==0){
-    //     printf("\nTotal buffer size: %f MB", total_recv_size_MB);
-    //     printf("\nMax buffer size: %f MB", max_size_MB);
-    //     printf("\nMin buffer size: %f MB \n", min_size_MB);
-    // }
+    if(rank==0){
+        printf("\nTotal buffer size: %f MB", total_recv_size_MB);
+        printf("\nMax buffer size: %f MB", max_size_MB);
+        printf("\nMin buffer size: %f MB \n", min_size_MB);
+    }
     
     // printf("\nrank %d, local_hdr xsz %lld", rank, local_hdr.xsz);
     // Allocate buffer for receiving all header data
@@ -397,52 +333,77 @@ int main(int argc, char *argv[]) {
     int ncid, cmode;
     char filename[256];
     cmode = NC_64BIT_DATA | NC_CLOBBER;
-    // size_t position = strlen(FILE_NAME) - 3;
-    // strncpy(filename, FILE_NAME, position);
+    // size_t position = strlen(file_name) - 3;
+    // strncpy(filename, file_name, position);
     // strcat(filename, "_new");
-    // strcat(filename, FILE_NAME + position);
-    // if (rank==0) printf("\n%s\n", OUTPUT_NAME);
+    // strcat(filename, file_name + position);
+    // if (rank==0) printf("\n%s\n", output_name);
     struct hdr **all_recv_hdr = (struct hdr **)malloc(nproc * sizeof(struct hdr*));
+
     deserialize_all_hdr(all_recv_hdr, all_collections_buffer, recv_displs, recvcounts, nproc);
     MPI_Info info = MPI_INFO_NULL;
     MPI_Info_create(&info);
-    MPI_Info_set(info, "nc_hash_size_dim", "4096");
-    MPI_Info_set(info, "nc_hash_size_var", "4096");
-    err = ncmpi_create(MPI_COMM_WORLD, OUTPUT_NAME, cmode, info, &ncid); ERR
+    // MPI_Info_set(info, "nc_hash_size_dim", "1048576");
+    // MPI_Info_set(info, "nc_hash_size_var", "1048576");
+#ifdef MEM_TRACKING
+    app_check_crt_mem(MPI_COMM_WORLD, 0);
+#endif
+    err = ncmpi_create(MPI_COMM_WORLD, output_name, cmode, info, &ncid); ERR
     MPI_Info_free(&info);
     MPI_Barrier(MPI_COMM_WORLD);
     end_time1 = MPI_Wtime();
     define_all_hdr(all_recv_hdr, nproc, ncid);
-
+#ifdef MEM_TRACKING
+    app_check_crt_mem(MPI_COMM_WORLD, 1);
+    pnetcdf_check_crt_mem(MPI_COMM_WORLD, 1);
+#endif
 
     // for (int i = 0; i < nproc; ++i) {
     //     struct hdr *recv_hdr = (struct hdr *)malloc(sizeof(struct hdr)); 
-    //     deserialize_hdr(recv_hdr, all_collections_buffer + recv_displs[i], recvcounts[i]);
+    //     deserialize_hdr_meta(recv_hdr, all_collections_buffer + recv_displs[i], recvcounts[i]);
     //     define_hdr(recv_hdr, ncid, rank);
-    //     free_hdr(recv_hdr);
+    //     free_hdr_meta(recv_hdr);
     // }
     // pnetcdf_check_crt_mem(MPI_COMM_WORLD, 0);
     io_time = MPI_Wtime() - end_time1;
+
     free_all_hdr(all_recv_hdr, nproc);
+#ifdef MEM_TRACKIN
+    app_check_crt_mem(MPI_COMM_WORLD, 2);
+    pnetcdf_check_crt_mem(MPI_COMM_WORLD, 2);
+#endif
     end_time2 = MPI_Wtime();
+
     err = ncmpi_enddef(ncid); ERR
+
     end_time3 = MPI_Wtime();
+#ifdef MEM_TRACKIN
+    app_check_crt_mem(MPI_COMM_WORLD, 3);
+    pnetcdf_check_crt_mem(MPI_COMM_WORLD, 3);
+#endif
+
     enddef_time = end_time3 - end_time2;
-    // pnetcdf_check_crt_mem(MPI_COMM_WORLD, 1);
+
 
     // Clean up
+    free_hdr_meta(&local_hdr);
     free(send_buffer);
     free(all_collections_buffer);
     free(all_collection_sizes);
     free(recv_displs);
     MPI_Barrier(MPI_COMM_WORLD);
     end_time3 = MPI_Wtime();
+    // print_memory_info();
+#ifdef MEM_TRACKING
+    app_check_crt_mem(MPI_COMM_WORLD, 4);
+    pnetcdf_check_crt_mem(MPI_COMM_WORLD, 4);
+#endif
     err = ncmpi_close(ncid); ERR
     end_time = MPI_Wtime();
     close_time = end_time - end_time3;
     end_to_end_time = end_time - start_time;
     mpi_time = end_time1 - start_time1;
-    // pnetcdf_check_crt_mem(MPI_COMM_WORLD, 2);
+
 
     double times[6] = {end_to_end_time, mpi_time, io_time, enddef_time, total_def_time, close_time};
     char *names[6] = {"end-end", "mpi-phase", "write", "enddef", "def_dim/var", "close"};
@@ -457,7 +418,13 @@ int main(int argc, char *argv[]) {
             printf("Min %s time: %f seconds\n", names[i], min_times[i]);
         }
     }
+#ifdef MEM_TRACKING
+    app_check_crt_mem(MPI_COMM_WORLD, 5);
+    pnetcdf_check_crt_mem(MPI_COMM_WORLD, 5);
     pnetcdf_check_mem_usage(MPI_COMM_WORLD);
+    app_check_mem_usage(MPI_COMM_WORLD);
+#endif
+    free_allocation_struct();
     MPI_Finalize();
     return 0;
 }

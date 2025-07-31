@@ -81,7 +81,8 @@ pnetcdf_io(MPI_Comm comm, char *filename, int cmode)
     sprintf(str_y, "dim_Y_rank_%d", rank);
     sprintf(str_x, "dim_X_rank_%d", rank);
     sprintf(str_blk, "blk_rank_%d", rank);
-
+    if (rank==0)
+        printf("\n rank %d: before def dim", rank);
     err = ncmpi_def_block(ncid, str_blk, &blkid); ERR
     err = ncmpi_def_dim(ncid, blkid, str_y, NY, &dimid[0]); ERR
     err = ncmpi_def_dim(ncid, blkid, str_x, global_nx, &dimid[1]); ERR
@@ -90,18 +91,22 @@ pnetcdf_io(MPI_Comm comm, char *filename, int cmode)
         for (j=0; j<global_nx; j++)
             buf[i][j] = rank + 1;
     sprintf(var_rank, "var_rank_%d", rank);
+    if (rank==0)
+        printf("\n rank %d: before def var", rank);
 
     err = ncmpi_def_var(ncid, blkid, var_rank, NC_INT, 2, dimid, &varid); ERR
     err = ncmpi_enddef(ncid); ERR
 
-
+    if (rank==0)
+        printf("\n rank %d: after ncmpi_enddef", rank);
     err = ncmpi_put_var_int_all(ncid, blkid, varid,  &buf[0][0]); ERR
     
 
 
     MPI_Barrier(comm);
     err = ncmpi_close(ncid); ERR
-
+    if (rank==0)
+        printf("\n rank %d: after close", rank);
     // printf("\n rank %d: after file close", rank);
     return nerrs;
 }

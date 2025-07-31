@@ -77,7 +77,7 @@ typedef struct metabuffer {
 
 
 // Function prototypes
-int xlen_nc_type(nc_type xtype, int *size);
+int xlen_nc_type_meta(nc_type xtype, int *size);
 static int putn_text(void **xpp, MPI_Offset nelems, const char *tp);
 static int put_uint32(void **xpp, unsigned int ip);
 static int serialize_dim(metabuffer *pbp, const hdr_dim *dimp);
@@ -88,11 +88,11 @@ static int serialize_attr(metabuffer *pbp, const hdr_attr *attrp);
 static int serialize_attrarray(metabuffer *pbp, const hdr_attrarray *ncap);
 static int serialize_var(metabuffer *pbp, const hdr_var *varp);
 static int serialize_vararray(metabuffer *pbp, const hdr_vararray *ncap);
-int serialize_hdr(struct hdr *ncp, void *buf);
+int serialize_hdr_meta(struct hdr *ncp, void *buf);
 
 
 // Deserialization functions
-int deserialize_hdr(struct hdr *ncp, void *buf, int buf_size);
+int deserialize_hdr_meta(struct hdr *ncp, void *buf, int buf_size);
 static int getn_text(void **xpp, MPI_Offset nelems, char *tp);
 static int get_uint32(void **xpp, unsigned int *ip);
 static int deserialize_nc_type(metabuffer *gbp, nc_type *xtypep);
@@ -105,11 +105,16 @@ static int deserialize_attrarray(metabuffer *gbp, hdr_attrarray *ncap);
 static int deserialize_var(metabuffer *gbp, hdr_var *varp);
 static int deserialize_vararray(metabuffer *gbp, hdr_vararray *ncap);
 
+// Read and distribute metadata
+
+int read_metadata_from_file(const char* filename, struct hdr *recv_hdr);
+int distribute_metadata(int rank, int nproc, struct hdr *all_hdr, struct hdr *local_hdr);
+
 /* Function prototypes */
-void free_hdr_dim(hdr_dim *dim);
-void free_hdr_dimarray(hdr_dimarray *dims);
-void free_hdr_attr(hdr_attr *attr);
-void free_hdr_attrarray(hdr_attrarray *attrs);
-void free_hdr_var(hdr_var *var);
-void free_hdr_vararray(hdr_vararray *vars);
-void free_hdr(struct hdr *header);
+void free_hdr_dim_meta(hdr_dim *dim);
+void free_hdr_dimarray_meta(hdr_dimarray *dims);
+void free_hdr_attr_meta(hdr_attr *attr);
+void free_hdr_attrarray_meta(hdr_attrarray *attrs);
+void free_hdr_var_meta(hdr_var *var);
+void free_hdr_vararray_meta(hdr_vararray *vars);
+void free_hdr_meta(struct hdr *header);

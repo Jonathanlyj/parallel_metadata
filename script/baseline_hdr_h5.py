@@ -5,6 +5,7 @@ import mpi4py.MPI as MPI
 import os
 num_vars = 0
 run_time_2 = 0
+ncopy = 20
 def create_example_hdf5_file(file_path):
     with h5py.File(file_path, 'w', libver='latest', driver='mpio', comm=MPI.COMM_WORLD) as file:
         # Dataset with Datatype, Dataspace, and Fill Value
@@ -73,7 +74,7 @@ def store_metadata(instance, metadata):
 
     return
 
-def create_metadata(metadata, instance=None):
+def create_metadata(metadata, instance=None, suffix=''):
     global run_time_2
 
     for key, info in metadata.items():
@@ -81,7 +82,7 @@ def create_metadata(metadata, instance=None):
             # Attribute
             attr_name = key[len('H5A_'):]
             start_time_2 = MPI.Wtime()
-            instance.attrs.create(attr_name, info['DAT'])
+            instance.attrs.create(attr_name + suffix, info['DAT'])
             end_time_2 = MPI.Wtime()
             run_time_2 += end_time_2 - start_time_2
 
@@ -102,7 +103,7 @@ def create_metadata(metadata, instance=None):
                 spaceid = h5py.h5s.create_simple(dataspace)
                 grpid = instance.id
 
-                obj_name_b = bytes(obj_name,encoding="utf-8")
+                obj_name_b = bytes(obj_name + suffix,encoding="utf-8")
                 datasetid = h5py.h5d.create(grpid, obj_name_b, h5py_dtype, spaceid, plist)
                 dataset = h5py.Dataset(datasetid)
                 create_metadata(info, instance=dataset)
@@ -111,14 +112,18 @@ def create_metadata(metadata, instance=None):
             else:
                 # Group
                 start_time_2 = MPI.Wtime()
-                group = instance.create_group(obj_name)
+                group = instance.create_group(obj_name + suffix)
                 end_time_2 = MPI.Wtime()
                 run_time_2 += end_time_2 - start_time_2
                 create_metadata(info, instance=group)
 
-def create_file_from_metadata(file_path, metadata, meta_block_size=None):
+def create_file_from_metadata(file_path, metadata, meta_block_size=None, ncopy=1):
     with h5py.File(file_path, 'w', driver="mpio", libver='latest', comm=MPI.COMM_WORLD, meta_block_size=meta_block_size) as file:
-        create_metadata(metadata, instance=file)
+        if ncopy > 1:
+            for i in range(ncopy):
+                create_metadata(metadata, instance=file, suffix=f'_copy_{ncopy}')
+        else:
+            create_metadata(metadata, instance=file)
 
 
 def store_file_metadata(file_path):
@@ -189,7 +194,7 @@ def exchange_metadata(metadata, rank, size):
 
 if __name__ == "__main__":
     # app_file_path = "/files2/scratch/FNAL/uboone/pynuml_output/nue_slice_panoptic_hdf/nue_slice_graphs.0001.h5"
-    app_file_dir = "/files2/scratch/FNAL/uboone/pynuml_output/nue_slice_panoptic_hdf"
+    app_file_path = "/homes/yll6162/parallel_metadata/script/example.h5"
     # app_file_dir = "/homes/yll6162/parallel_metadata/script/test"
 
     mb = 1024 * 1024
@@ -226,13 +231,13 @@ if __name__ == "__main__":
         
 
     # ---------------------------------------------------- Create Metadata Collectively--------------------------------------------------
-    output_file_path = f"{app_file_dir.split('/')[-1]}_merged.h5"
+    output_file_path = f"{app_file_dir.split('/')[-1]}_merged_1copy.h5"
     comm.Barrier()
     # start_time_2 = MPI.Wtime()
     if meta_block_size:
         create_file_from_metadata(output_file_path, all_metadata, meta_block_size = meta_block_size * mb)
     else:
-        create_file_from_metadata(output_file_path, all_metadata)
+        create_file_from_metadata(output_file_path, all_metadata, ncopy=1)
     # end_time_2 = MPI.Wtime()
     # crt_time = end_time_2 - start_time_2
     min_time = comm.reduce(run_time_2, op=MPI.MIN, root=0)

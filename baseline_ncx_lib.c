@@ -7,7 +7,12 @@
 #include <mpi.h>
 #include <pnetcdf.h>
 #include "baseline_ncx_lib.h" 
+#include "mem_tracker.h"
 
+#ifdef MEM_TRACKING
+#define malloc(size) tracked_malloc(size)
+#define free(ptr)    tracked_free(ptr)
+#endif
 
   /* ---------------------------------- Serializaition ----------------------------------------*/
 
@@ -62,7 +67,7 @@ void meta_free_hdr_attrarray(hdr_attrarray *attrs) {
             for (int i = 0; i < attrs->ndefined; i++) {
                 meta_free_hdr_attr(attrs->value[i]);
             }
-            // free(attrs->value);
+            free(attrs->value);
             attrs->value = NULL;
             // free(attrs);
         }
@@ -91,7 +96,7 @@ void meta_free_hdr_vararray(hdr_vararray *vars) {
 void meta_free_hdr(struct hdr *header) {
     if (header != NULL) {
         meta_free_hdr_dimarray(&(header->dims));
-        // free_hdr_attrarray(&(header->attrs));
+        // free_hdr_attrarray_meta(&(header->attrs));
         meta_free_hdr_vararray(&(header->vars));
         // free(header);
     }

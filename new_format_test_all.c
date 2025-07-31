@@ -17,57 +17,29 @@
 #include <assert.h>
 // #include "baseline_ncx_lib.h"
 #include "baseline_ncx_app.h" 
+#include "mem_tracker.h"
 
-
+#ifdef MEM_TRACKING
+#define malloc(size) tracked_malloc(size)
+#define free(ptr)    tracked_free(ptr)
+#define realloc(ptr, size) tracked_realloc(ptr, size)
+#endif
 
 
 static int verbose;
-
+const char *source_name = NULL;
+const char *output_name = NULL;
 
 
 #define ERR {if(err!=NC_NOERR){printf("Error at %s:%d : %s\n", __FILE__,__LINE__, ncmpi_strerror(err));nerrs++;}}
 
-// #define SOURCE_NAME "/pscratch/sd/y/yll6162/FS_2M_32/save_input_test_all"
-#define SOURCE_NAME "/files2/scratch/yll6162/parallel_metadata/save_input_test_all_output"
-// #define SOURCE_NAME "/files2/scratch/yll6162/parallel_metadata/script/dummy_test.nc"
-// #define OUTPUT_NAME "/pscratch/sd/y/yll6162/FS_2M_32/new_format_test_all.pnc"
-#define OUTPUT_NAME "/files2/scratch/yll6162/parallel_metadata/new_format_test_all.pnc"
 
 double def_start_time;
 double total_def_time = 0;
 
 
-//Following functions definitions are going to be overridden by LD_PRELOAD
-// int ncmpi_create(MPI_Comm comm, const char *path, int cmode, MPI_Info info, int *ncidp){
-//     printf("this function is not supposed to run\n");
-//     return 0;
-// }
 
-// int ncmpi_enddef(int ncid) {
-//     printf("this function is not supposed to run\n");
-//     return 0;
-// }
-
-// int ncmpi_close(int ncid){
-//     printf("this function is not supposed to run\n");
-//     return 0;
-// }
-
-// int ncmpi_def_block(int ncid, const char *name, int *blkidp){
-//     printf("this function is not supposed to run\n");
-//     return 0;
-// }
-
-// int ncmpi_def_var(int ncid, int blkid, const char *name, nc_type xtype, int ndims, const int *dimidsp, int *varidp){
-//     printf("this function is not supposed to run\n");
-//     return 0;
-// }
-
-// int ncmpi_def_dim(int ncid, int blkid, const char *name, MPI_Offset len, int *idp){
-//     printf("this function is not supposed to run\n");
-//     return 0;
-// }
-
+#ifdef MEM_TRACKING
 /*----< pnetcdf_check_mem_usage() >------------------------------------------*/
 /* check PnetCDF library internal memory usage */
 static int
@@ -82,9 +54,15 @@ pnetcdf_check_mem_usage(MPI_Comm comm)
     err = ncmpi_inq_malloc_max_size(&malloc_size);
     if (err == NC_NOERR) {
         MPI_Reduce(&malloc_size, &sum_size, 1, MPI_OFFSET, MPI_SUM, 0, MPI_COMM_WORLD);
-        if (rank == 0)
-            printf("maximum heap memory allocated by PnetCDF internally is %lld bytes (%.2f MB)\n",
+        if (rank == 0){
+            printf("total maximum heap memory allocated by PnetCDF internally is %lld bytes (%.2f MB)\n",
                    sum_size, (float)sum_size /1048576);
+            printf("rank 0 maximum heap memory allocated by PnetCDF internally is %lld bytes (%.2f MB)\n",
+                   malloc_size, (float)malloc_size /1048576);
+        }else if (rank == 1){
+            printf("rank 1 maximum heap memory allocated by PnetCDF internally is %lld bytes (%.2f MB)\n",
+                   malloc_size, (float)malloc_size /1048576);
+        }
     }
     else if (err != NC_ENOTENABLED) {
         printf("Error at %s:%d: %s\n", __FILE__,__LINE__,ncmpi_strerror(err));
@@ -93,47 +71,86 @@ pnetcdf_check_mem_usage(MPI_Comm comm)
     return nerrs;
 }
 
-/* ---------------------------------- Read Metadata ----------------------------------------*/
+/* check PnetCDF library internal memory usage */
+static int
+pnetcdf_check_crt_mem(MPI_Comm comm, int checkpoint)
+{
+    int err, nerrs=0, rank;
+    MPI_Offset malloc_size, sum_size;
 
-int read_metadata_from_file(const char* filename, struct hdr *recv_hdr) {
-    // Open the file in binary read mode
-    FILE* file = fopen(filename, "rb");
-    if (file == NULL) {
-        perror("Failed to open file");
-        return 1;
+    MPI_Comm_rank(comm, &rank);
+
+    /* print info about PnetCDF internal malloc usage */
+    err = ncmpi_inq_malloc_size(&malloc_size);
+    if (err == NC_NOERR) {
+        MPI_Reduce(&malloc_size, &sum_size, 1, MPI_OFFSET, MPI_SUM, 0, MPI_COMM_WORLD);
+        if (rank == 0){
+            printf("checkpoint %d: total current heap memory allocated by PnetCDF internally is %lld bytes (%.2f MB)\n",
+                   checkpoint, sum_size, (float)sum_size /1048576);
+            printf("checkpoint %d: rank 0 current heap memory allocated by PnetCDF internally is %lld bytes (%.2f MB)\n",
+                   checkpoint, malloc_size, (float)malloc_size /1048576);
+        }else if (rank == 1){
+            printf("checkpoint %d: rank 1 current heap memory allocated by PnetCDF internally is %lld bytes (%.2f MB)\n",
+                   checkpoint, malloc_size, (float)malloc_size /1048576);
+        }
     }
-
-    // Move file pointer to the end to determine the file size
-    fseek(file, 0, SEEK_END);
-    long file_size = ftell(file);
-    rewind(file);  // Move the file pointer back to the beginning
-
-    // Allocate memory for the buffer
-    char *buffer = (char*) malloc(file_size);
-    if (buffer == NULL) {
-        perror("Failed to allocate memory");
-        fclose(file);
-        return 1;
+    else if (err != NC_ENOTENABLED) {
+        printf("Error at %s:%d: %s\n", __FILE__,__LINE__,ncmpi_strerror(err));
+        nerrs++;
     }
-
-    // Read the file contents into the buffer
-    // printf("file_size: %ld\n", file_size);
-    size_t read_size = fread(buffer, 1, file_size, file);
-    if (read_size != file_size) {
-        perror("Failed to read complete file");
-        free(buffer);
-        fclose(file);
-        return 1;
-    }
-
-    // Close the file after reading
-    fclose(file);
-    recv_hdr->xsz = file_size;
-    deserialize_hdr(recv_hdr, buffer, file_size);
-    free(buffer);
-    return 0;
+    return nerrs;
 }
-  
+
+/* check PnetCDF library internal memory usage */
+static int
+app_check_crt_mem(MPI_Comm comm, int checkpoint)
+{
+    int err=0, nerrs=0, rank;
+    MPI_Offset malloc_size, sum_size;
+
+    MPI_Comm_rank(comm, &rank);
+
+    /* print info about PnetCDF internal malloc usage */
+    malloc_size = inq_malloc_use();
+    if (err == NC_NOERR) {
+        MPI_Reduce(&malloc_size, &sum_size, 1, MPI_OFFSET, MPI_SUM, 0, MPI_COMM_WORLD);
+        if (rank == 0){
+            printf("checkpoint %d: total current heap memory allocated by App internally is %lld bytes (%.2f MB)\n",
+                   checkpoint, sum_size, (float)sum_size /1048576);
+            printf("checkpoint %d: rank 0 current heap memory allocated by App internally is %lld bytes (%.2f MB)\n",
+                   checkpoint, malloc_size, (float)malloc_size /1048576);
+        }else if (rank == 1){
+            printf("checkpoint %d: rank 1 current heap memory allocated by App internally is %lld bytes (%.2f MB)\n",
+                   checkpoint, malloc_size, (float)malloc_size /1048576);
+        }
+    }
+    return nerrs;
+}
+static int
+app_check_mem_usage(MPI_Comm comm)
+{
+    int err=0, nerrs=0, rank;
+    MPI_Offset malloc_size, sum_size;
+
+    MPI_Comm_rank(comm, &rank);
+
+    /* print info about PnetCDF internal malloc usage */
+    malloc_size = inq_max_malloc_use();
+    if (err == NC_NOERR) {
+        MPI_Reduce(&malloc_size, &sum_size, 1, MPI_OFFSET, MPI_SUM, 0, MPI_COMM_WORLD);
+        if (rank == 0){
+            printf("total maximum heap memory allocated by App internally is %lld bytes (%.2f MB)\n",
+                   sum_size, (float)sum_size /1048576);
+            printf("rank 0 maximum heap memory allocated by App internally is %lld bytes (%.2f MB)\n",
+                   malloc_size, (float)malloc_size /1048576);
+        }else if (rank == 1){
+            printf("rank 1 maximum heap memory allocated by App internally is %lld bytes (%.2f MB)\n",
+                   malloc_size, (float)malloc_size /1048576);
+        }
+    }
+    return nerrs;
+}
+#endif
 
 /* ---------------------------------- Decode Metadata ----------------------------------------*/
 int define_hdr_nf(struct hdr *hdr_data, int ncid, int rank, int var_start, int var_count) {
@@ -206,13 +223,24 @@ int main(int argc, char *argv[]) {
     MPI_Init(&argc, &argv);
     int rank, nproc, status, err, nerrs=0;
     double end_time, start_time, start_time1, end_time1, start_time2, start_time3, max_time, min_time;
-    double io_time, enddef_time, close_time, end_to_end_time;
+    double enddef_time, close_time, end_to_end_time;
     MPI_Comm_rank(MPI_COMM_WORLD, &rank);
     MPI_Comm_size(MPI_COMM_WORLD, &nproc);
+    if (argc < 3) {
+        if (rank == 0)
+            fprintf(stderr, "Usage: %s <source_file> <output_file>\n", argv[0]);
+        MPI_Finalize();
+        return 1;
+    }
+    source_name = argv[1];
+    output_name = argv[2];
     struct hdr all_hdr;
     // struct hdr recv_hdr;
     // create_dummy_data(rank, &dummy);
-    read_metadata_from_file(SOURCE_NAME, &all_hdr);
+
+    //the following function's memory usage should be selectively tracked - production application dont need source file for metadata
+    read_metadata_from_file(source_name, &all_hdr);
+
    // Print the created data for each process
 
     // printf("Total Header Size: %lld\n", all_hdr.xsz);
@@ -242,23 +270,26 @@ int main(int argc, char *argv[]) {
     
 
     int ncid, cmode;
-    char filename[256];
     cmode = NC_64BIT_DATA | NC_CLOBBER;
-    // size_t position = strlen(SOURCE_NAME) - 3;
-    // strncpy(filename, SOURCE_NAME, position);
+    // size_t position = strlen(source_name) - 3;
+    // strncpy(filename, source_name, position);
     // strcat(filename, "_new");
-    // strcat(filename, SOURCE_NAME + position);
-    // if (rank==0) printf("\n%s\n", OUTPUT_NAME);
+    // strcat(filename, source_name + position);
+    // if (rank==0) printf("\n%s\n", output_name);
     MPI_Barrier(MPI_COMM_WORLD);
     start_time = MPI_Wtime();
     MPI_Info info = MPI_INFO_NULL;
     MPI_Info_create(&info);
-    MPI_Info_set(info, "nc_hash_size_dim", "16777216");
-    MPI_Info_set(info, "nc_hash_size_var", "8388608");
-
-    snprintf(filename, sizeof(filename), "%.*s_%d.pnc", 
-            (int)(sizeof(OUTPUT_NAME) - 5), OUTPUT_NAME, nproc);
-    err = ncmpi_create(MPI_COMM_WORLD, filename, cmode, info, &ncid); ERR
+    // MPI_Info_set(info, "nc_hash_size_dim", "16777216");
+    // MPI_Info_set(info, "nc_hash_size_var", "8388608");
+    // MPI_Info_set(info, "nc_hash_size_dim", "16384");
+    // MPI_Info_set(info, "nc_hash_size_var", "16384");
+    // The following memory footprint should be selectively tracked because only a fraction of metadata is used in actual application
+    // For simplicity, we only record 1/nproc fraction of the reported mem usage 
+#ifdef MEM_TRACKING
+    app_check_crt_mem(MPI_COMM_WORLD, 0);
+#endif
+    err = ncmpi_create(MPI_COMM_WORLD, output_name, cmode, info, &ncid); ERR
     double create_time = MPI_Wtime() - start_time;
     // MPI_Barrier(MPI_COMM_WORLD);
 
@@ -274,37 +305,58 @@ int main(int argc, char *argv[]) {
     // printf("\nrank %d, start %d, count %d\n", rank, start, count);
     start_time1 = MPI_Wtime();
     define_hdr_nf(&all_hdr, ncid, rank, start, count);
-    io_time = MPI_Wtime() - start_time1;
-    
-    
+#ifdef MEM_TRACKING
+    app_check_crt_mem(MPI_COMM_WORLD, 1);
+    pnetcdf_check_crt_mem(MPI_COMM_WORLD, 1);
+#endif
+    // free_hdr_meta(&all_hdr);
+#ifdef MEM_TRACKING
+    app_check_crt_mem(MPI_COMM_WORLD, 2);
+    pnetcdf_check_crt_mem(MPI_COMM_WORLD, 2);
+#endif
     // MPI_Barrier(MPI_COMM_WORLD);
     start_time2 = MPI_Wtime();
     err = ncmpi_enddef(ncid); ERR
     enddef_time = MPI_Wtime() - start_time2;
+#ifdef MEM_TRACKING
+    app_check_crt_mem(MPI_COMM_WORLD, 3);
+    pnetcdf_check_crt_mem(MPI_COMM_WORLD, 3);
+#endif
 
     // Clean up
     // MPI_Barrier(MPI_COMM_WORLD);
+#ifdef MEM_TRACKING
+    app_check_crt_mem(MPI_COMM_WORLD, 4);
+    pnetcdf_check_crt_mem(MPI_COMM_WORLD, 4);
+#endif
+    MPI_Barrier(MPI_COMM_WORLD);
     start_time3 = MPI_Wtime();
     err = ncmpi_close(ncid); ERR
     end_time =  MPI_Wtime();
     close_time = end_time - start_time3;
     end_to_end_time = end_time - start_time;
-    free_hdr(&all_hdr);
 
+    ;
 
-    double times[6] = {end_to_end_time, create_time,  io_time, enddef_time, close_time, total_def_time};
-    char *names[6] = {"end-end", "create", "write", "enddef", "close", "def_dim/var"};
-    double max_times[6], min_times[6];
+    double times[5] = {end_to_end_time, create_time,  enddef_time, close_time, total_def_time};
+    char *names[5] = {"end-end", "create", "enddef", "close", "def_dim/var"};
+    double max_times[5], min_times[5];
 
-    MPI_Reduce(&times[0], &max_times[0], 6, MPI_DOUBLE, MPI_MAX, 0, MPI_COMM_WORLD);
-    MPI_Reduce(&times[0], &min_times[0], 6, MPI_DOUBLE, MPI_MIN, 0, MPI_COMM_WORLD);
-    for (int i = 0; i < 6; i++) {
+    MPI_Reduce(&times[0], &max_times[0], 5, MPI_DOUBLE, MPI_MAX, 0, MPI_COMM_WORLD);
+    MPI_Reduce(&times[0], &min_times[0], 5, MPI_DOUBLE, MPI_MIN, 0, MPI_COMM_WORLD);
+    for (int i = 0; i < 5; i++) {
         if (rank == 0) {
             printf("Max %s time: %f seconds\n", names[i], max_times[i]);
             printf("Min %s time: %f seconds\n", names[i], min_times[i]);
         }
     }
+#ifdef MEM_TRACKING
+    app_check_crt_mem(MPI_COMM_WORLD, 5);
+    pnetcdf_check_crt_mem(MPI_COMM_WORLD, 5);
     pnetcdf_check_mem_usage(MPI_COMM_WORLD);
+    app_check_mem_usage(MPI_COMM_WORLD);
+#endif
+    free_hdr_meta(&all_hdr);
     MPI_Finalize();
     return 0;
 

@@ -198,7 +198,7 @@ int main(int argc, char *argv[]) {
 
     err = ncmpi_create(MPI_COMM_WORLD, OUTPUT_NAME, cmode, MPI_INFO_NULL, &ncid); ERR
     define_hdr(&all_hdr, ncid, rank);
-    free_hdr(&all_hdr);
+    free_hdr_meta(&all_hdr);
     err = ncmpi_enddef(ncid); ERR
 
 

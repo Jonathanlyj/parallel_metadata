@@ -166,7 +166,7 @@ void create_dummy_data(int rank, struct hdr *dummy) {
             dummy->xsz += sizeof(uint32_t) + sizeof(char) * dummy->vars.value[i]->attrs.value[k]->name_len; //attr name
             dummy->xsz += sizeof(uint32_t); // nc_type
             dummy->xsz += sizeof(uint32_t); // nelems
-            status = xlen_nc_type(dummy->vars.value[i]->attrs.value[k]->xtype, &v_attrV_xsz);
+            status = xlen_nc_type_meta(dummy->vars.value[i]->attrs.value[k]->xtype, &v_attrV_xsz);
             dummy->xsz += dummy->vars.value[i]->attrs.value[k]->nelems * v_attrV_xsz; // attr_value
 
         }
@@ -210,7 +210,7 @@ int main(int argc, char *argv[]) {
 //     }
 //     printf("rank %d, buffer size: %lld \n", rank, dummy.xsz);
     char* send_buffer = (char*) malloc(dummy.xsz);
-    status = serialize_hdr(&dummy, send_buffer);
+    status = serialize_hdr_meta(&dummy, send_buffer);
     // printf("rank %d, buffer: %s", rank, send_buffer);
 
 
@@ -262,7 +262,7 @@ int main(int argc, char *argv[]) {
     for (int i = 0; i < size; ++i) {
         struct hdr recv_hdr;
         // printf("rank %d, recv_displs: %d, recvcounts: %d \n",  rank, recv_displs[i], recvcounts[i]);
-        deserialize_hdr(&recv_hdr, all_collections_buffer + recv_displs[i], recvcounts[i]);
+        deserialize_hdr_meta(&recv_hdr, all_collections_buffer + recv_displs[i], recvcounts[i]);
         define_hdr(&recv_hdr, ncid);
     }
 

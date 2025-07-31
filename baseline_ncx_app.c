@@ -7,12 +7,20 @@
 #include <mpi.h>
 #include <pnetcdf.h>
 #include "baseline_ncx_app.h" 
+#include "mem_tracker.h"
+
+#ifdef MEM_TRACKING
+#define malloc(size) tracked_malloc(size)
+#define free(ptr)    tracked_free(ptr)
+#define realloc(ptr, size) tracked_realloc(ptr, size)
+#define strdup(s) tracked_strdup(s)
+#endif
 
 
   /* ---------------------------------- Serializaition ----------------------------------------*/
 
 int
-xlen_nc_type(nc_type xtype, int *size)
+xlen_nc_type_meta(nc_type xtype, int *size)
 {
     switch(xtype) {
         case NC_BYTE:
@@ -105,10 +113,10 @@ serialize_attrV(metabuffer    *pbp,
     int xsz;
     int sz;
 
-    /* xlen_nc_type() returns the element size (unaligned) of
+    /* xlen_nc_type_meta() returns the element size (unaligned) of
      * attrp->xtype attrp->xsz is the aligned total size of attribute values
      */
-    xlen_nc_type(attrp->xtype, &xsz);
+    xlen_nc_type_meta(attrp->xtype, &xsz);
     sz = attrp->nelems * xsz;
     memcpy(pbp->pos, attrp->xvalue, (size_t)sz);
     pbp->pos = (void *)((char *)pbp->pos + sz);
@@ -238,9 +246,9 @@ serialize_vararray(metabuffer        *pbp,
 
 
 
-/*----< serialize_hdr() >----------------------------------------------*/
+/*----< serialize_hdr_meta() >----------------------------------------------*/
 int
-serialize_hdr(struct hdr *ncp, void *buf)
+serialize_hdr_meta(struct hdr *ncp, void *buf)
 {
     int status;
     metabuffer putbuf;
@@ -366,7 +374,7 @@ static int deserialize_dimarray(metabuffer *gbp, hdr_dimarray *ncap) {
 static int deserialize_attrV(metabuffer *gbp, hdr_attr *attrp) {
     int xsz, sz, err;
 
-    xlen_nc_type(attrp->xtype, &xsz);
+    xlen_nc_type_meta(attrp->xtype, &xsz);
     sz = attrp->nelems * xsz;
 
     attrp->xvalue = malloc(sz);
@@ -509,7 +517,7 @@ static int deserialize_vararray(metabuffer *gbp, hdr_vararray *ncap) {
     return 0;
 }
 
-int deserialize_hdr(struct hdr *ncp, void *buf, int buf_size) {
+int deserialize_hdr_meta(struct hdr *ncp, void *buf, int buf_size) {
 
     int status;
     metabuffer getbuf;
@@ -527,7 +535,12 @@ int deserialize_hdr(struct hdr *ncp, void *buf, int buf_size) {
     if (status != NC_NOERR) return status;
     // printf("HERE: %ld", getbuf.pos - getbuf.base);
     // printf("HERE: %ld",  getbuf.size);
-    assert((int)(getbuf.pos - getbuf.base) == getbuf.size);
+    // assert((int)(getbuf.pos - getbuf.base) == getbuf.size);
+    if ((int)(getbuf.pos - getbuf.base) != getbuf.size) {
+        printf("Deserialization error: consumed = %ld, expected = %d\n",
+            (long)(getbuf.pos - getbuf.base), getbuf.size);
+        return -1;
+    }
 
 
 
@@ -536,68 +549,200 @@ int deserialize_hdr(struct hdr *ncp, void *buf, int buf_size) {
 
 
 
-void free_hdr_dim(hdr_dim *dim) {
+void free_hdr_dim_meta(hdr_dim *dim) {
     if (dim != NULL) {
         free(dim->name);
         free(dim);
     }
 }
 
-void free_hdr_dimarray(hdr_dimarray *dims) {
+void free_hdr_dimarray_meta(hdr_dimarray *dims) {
     if (dims != NULL) {
         for (int i = 0; i < dims->ndefined; i++) {
-            free_hdr_dim(dims->value[i]);
+            
+            free_hdr_dim_meta(dims->value[i]);
         }
         free(dims->value);
         //free(dims);
     }
 }
 
-void free_hdr_attr(hdr_attr *attr) {
+void free_hdr_attr_meta(hdr_attr *attr) {
     if (attr != NULL) {
         free(attr->name);
         free(attr->xvalue);
     }
 }
 
-void free_hdr_attrarray(hdr_attrarray *attrs) {
+void free_hdr_attrarray_meta(hdr_attrarray *attrs) {
     if (attrs != NULL) {
         if (attrs->value != NULL) {
             for (int i = 0; i < attrs->ndefined; i++) {
-                free_hdr_attr(attrs->value[i]);
+                free_hdr_attr_meta(attrs->value[i]);
             }
             free(attrs->value);
             attrs->value = NULL;
-            free(attrs);
+            // free(attrs);
         }
     }
 }
 
-void free_hdr_var(hdr_var *var) {
+void free_hdr_var_meta(hdr_var *var) {
     if (var != NULL) {
         free(var->name);
         free(var->dimids);
 
-        free_hdr_attrarray(&(var->attrs));
+        free_hdr_attrarray_meta(&(var->attrs));
         free(var);
     }
 }
 
-void free_hdr_vararray(hdr_vararray *vars) {
+void free_hdr_vararray_meta(hdr_vararray *vars) {
     if (vars != NULL) {
         for (int i = 0; i < vars->ndefined; i++) {
-            free_hdr_var(vars->value[i]);
+            free_hdr_var_meta(vars->value[i]);
         }
         free(vars->value);
         // free(vars);
     }
 }
 
-void free_hdr(struct hdr *header) {
+void free_hdr_meta(struct hdr *header) {
     if (header != NULL) {
-        free_hdr_dimarray(&(header->dims));
-        // free_hdr_attrarray(&(header->attrs));
-        free_hdr_vararray(&(header->vars));
+        free_hdr_dimarray_meta(&(header->dims));
+        // free_hdr_attrarray_meta(&(header->attrs));
+        free_hdr_vararray_meta(&(header->vars));
     }
 }
 
+/* ---------------------------------- Read Metadata ----------------------------------------*/
+int read_metadata_from_file(const char* filename, struct hdr *recv_hdr) {
+    // Open the file in binary read mode
+    FILE* file = fopen(filename, "rb");
+    if (file == NULL) {
+        perror("Failed to open file");
+        return 1;
+    }
+
+    // Move file pointer to the end to determine the file size
+    fseek(file, 0, SEEK_END);
+    long file_size = ftell(file);
+    rewind(file);  // Move the file pointer back to the beginning
+
+    // Allocate memory for the buffer
+    // char *buffer = (char*) malloc(file_size);
+    char *buffer = (char*) malloc(file_size);
+    if (buffer == NULL) {
+        perror("Failed to allocate memory");
+        fclose(file);
+        return 1;
+    }
+
+    // Read the file contents into the buffer
+    // printf("file_size: %ld\n", file_size);
+    size_t read_size = fread(buffer, 1, file_size, file);
+    if (read_size != file_size) {
+        perror("Failed to read complete file");
+        free(buffer);
+        fclose(file);
+        return 1;
+    }
+
+    // Close the file after reading
+    fclose(file);
+    recv_hdr->xsz = file_size;
+    deserialize_hdr_meta(recv_hdr, buffer, file_size);
+    // free(buffer);
+    free(buffer);
+    return 0;
+}
+  
+/* ---------------------------------- Distribute Metadata ----------------------------------------*/
+
+int distribute_metadata(int rank, int nproc, struct hdr *all_hdr, struct hdr *local_hdr) {
+    int num_vars = all_hdr->vars.ndefined;
+    int vars_per_process = num_vars / nproc;
+    int remainder = num_vars % nproc;
+
+    // Determine start and count based on rank
+    int start = rank * vars_per_process + (rank < remainder ? rank : remainder);
+    int count = vars_per_process + (rank < remainder ? 1 : 0);
+
+    local_hdr->vars.ndefined = count;
+    local_hdr->dims.ndefined = 0;
+    local_hdr->attrs.ndefined = 0;
+    local_hdr->xsz = 2 * sizeof(uint32_t); // NC_Variable and ndefined
+    local_hdr->xsz += 2 * sizeof(uint32_t); // NC_Dimension and nelems
+
+    local_hdr->vars.value = (hdr_var **)malloc(count * sizeof(hdr_var *));
+    local_hdr->dims.value = NULL;
+
+    int tot_num_dims = 0;
+
+    for (int i = 0; i < count; ++i) {
+        hdr_var *src_var = all_hdr->vars.value[start + i];
+        hdr_var *dst_var = (hdr_var *)malloc(sizeof(hdr_var));
+
+        // Copy name
+        dst_var->name_len = src_var->name_len;
+        dst_var->name = strdup(src_var->name);
+
+        // Copy type and dims
+        dst_var->xtype = src_var->xtype;
+        dst_var->ndims = src_var->ndims;
+        dst_var->dimids = (int *)malloc(src_var->ndims * sizeof(int));
+
+        // Allocate and copy attributes
+        dst_var->attrs.ndefined = src_var->attrs.ndefined;
+        dst_var->attrs.value = (hdr_attr **)malloc(src_var->attrs.ndefined * sizeof(hdr_attr *));
+
+        for (int j = 0; j < src_var->attrs.ndefined; ++j) {
+            hdr_attr *src_attr = src_var->attrs.value[j];
+            hdr_attr *dst_attr = (hdr_attr *)malloc(sizeof(hdr_attr));
+            dst_attr->name_len = src_attr->name_len;
+            dst_attr->name = strdup(src_attr->name);
+            dst_attr->xtype = src_attr->xtype;
+            dst_attr->nelems = src_attr->nelems;
+
+            int elem_sz;
+            xlen_nc_type_meta(dst_attr->xtype, &elem_sz);
+            dst_attr->xvalue = malloc(elem_sz * dst_attr->nelems);
+            memcpy(dst_attr->xvalue, src_attr->xvalue, elem_sz * dst_attr->nelems);
+
+            dst_var->attrs.value[j] = dst_attr;
+
+            local_hdr->xsz += sizeof(uint32_t) + dst_attr->name_len * sizeof(char);
+            local_hdr->xsz += 2 * sizeof(uint32_t);
+            local_hdr->xsz += dst_attr->nelems * elem_sz;
+        }
+
+        // Copy dimids and related dim info
+        for (int k = 0; k < dst_var->ndims; ++k) {
+            int dimid = src_var->dimids[k];
+            hdr_dim *src_dim = all_hdr->dims.value[dimid];
+
+            // Copy dimension
+            hdr_dim *dst_dim = (hdr_dim *)malloc(sizeof(hdr_dim));
+            dst_dim->name_len = src_dim->name_len;
+            dst_dim->name = strdup(src_dim->name);
+            dst_dim->size = src_dim->size;
+
+            // Reallocate dims array
+            local_hdr->dims.value = (hdr_dim **)realloc(local_hdr->dims.value, (local_hdr->dims.ndefined + 1) * sizeof(hdr_dim *));
+            local_hdr->dims.value[local_hdr->dims.ndefined] = dst_dim;
+
+            dst_var->dimids[k] = local_hdr->dims.ndefined;
+            local_hdr->dims.ndefined++;
+
+            local_hdr->xsz += sizeof(uint32_t) + dst_dim->name_len * sizeof(char);
+            local_hdr->xsz += sizeof(uint32_t);
+        }
+
+        local_hdr->vars.value[i] = dst_var;
+        local_hdr->xsz += sizeof(uint32_t) + dst_var->name_len * sizeof(char); // var name
+        local_hdr->xsz += sizeof(uint32_t); // xtype
+        local_hdr->xsz += sizeof(uint32_t); // nelems of dim list
+        local_hdr->xsz += sizeof(uint32_t) * dst_var->ndims; // dimid list
+        local_hdr->xsz += 2 * sizeof(uint32_t); // NC_Attribute and ndefined
+    }
+}

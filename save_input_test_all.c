@@ -24,12 +24,15 @@ static int verbose;
 #define ERR {if(err!=NC_NOERR){printf("Error at %s:%d : %s\n", __FILE__,__LINE__, ncmpi_strerror(err));nerrs++;}}
 
 // #define FILE_NAME "/global/homes/y/yll6162/parallel_metadata/data/nue_slice_panoptic_hdf_merged.nc"
-#define FILE_NAME "/files2/scratch/yll6162/parallel_metadata/script/nue_slice_panoptic_hdf_merged_10_copy.nc"
+// #define FILE_NAME "/files2/scratch/yll6162/parallel_metadata/script/nue_slice_panoptic_hdf_merged_10_copy.nc"
+#define FILE_NAME "benchmark_testfile.nc"
+// #define FILE_NAME "/homes/yll6162/parallel_metadata/nue_slice_panoptic_hdf_merged.nc"
+
 // #define FILE_NAME "/files2/scratch/yll6162/parallel_metadata/script/local_hdr_test.nc"
 // #define OUTPUT_NAME "/pscratch/sd/y/yll6162/FS_2M_32/save_input_test_all"
 // #define FILE_NAME "testfile.nc"
-#define OUTPUT_NAME "save_input_test_all_10_copy"
-
+#define OUTPUT_NAME "benchmark_testfile_bin"
+// #define OUTPUT_NAME "save_input_test_all_1_copy"
 
 double def_start_time, total_def_time=0;
 /*----< pnetcdf_check_mem_usage() >------------------------------------------*/
@@ -182,14 +185,14 @@ void read_metadata(int rank, int nproc, struct hdr *file_info) {
             // Allocate memory for attribute value and read it
             variable_info->attrs.value[j]->xtype = attr_type;
             variable_info->attrs.value[j]->nelems = attr_size;
-            xlen_nc_type(attr_type, &elem_sz);
+            xlen_nc_type_meta(attr_type, &elem_sz);
             variable_info->attrs.value[j]->xvalue = malloc(attr_size * elem_sz);
             ncmpi_get_att(ncid, i, variable_info->attrs.value[j]->name, variable_info->attrs.value[j]->xvalue);
 
             file_info->xsz += sizeof(uint32_t) + sizeof(char) * variable_info->attrs.value[j]->name_len; //attr name
             file_info->xsz += sizeof(uint32_t); // nc_type
             file_info->xsz += sizeof(uint32_t); // nelems
-            status = xlen_nc_type(variable_info->attrs.value[j]->xtype, &v_attrV_xsz);
+            status = xlen_nc_type_meta(variable_info->attrs.value[j]->xtype, &v_attrV_xsz);
             file_info->xsz += variable_info->attrs.value[j]->nelems * v_attrV_xsz; // attr_value
         }
 
@@ -207,7 +210,7 @@ void read_metadata(int rank, int nproc, struct hdr *file_info) {
 
 static int free_all_hdr(struct hdr **all_recv_hdr, int nproc){
     if (all_recv_hdr != NULL){
-        for (int i=0; i< nproc; i++) free_hdr(all_recv_hdr[i]);
+        for (int i=0; i< nproc; i++) free_hdr_meta(all_recv_hdr[i]);
         free(all_recv_hdr);
     }
     return 0;
@@ -254,7 +257,7 @@ int main(int argc, char *argv[]) {
     start_time = start_time1 = MPI_Wtime();
     char* send_buffer = (char*) malloc(local_hdr.xsz);
     printf("\nlocal_hdr.xsz: %lld\n", local_hdr.xsz);
-    status = serialize_hdr(&local_hdr, send_buffer);
+    status = serialize_hdr_meta(&local_hdr, send_buffer);
 
     FILE* file = fopen(OUTPUT_NAME, "wb");
 
@@ -272,9 +275,9 @@ int main(int argc, char *argv[]) {
 
     // for (int i = 0; i < nproc; ++i) {
     //     struct hdr *recv_hdr = (struct hdr *)malloc(sizeof(struct hdr)); 
-    //     deserialize_hdr(recv_hdr, all_collections_buffer + recv_displs[i], recvcounts[i]);
+    //     deserialize_hdr_meta(recv_hdr, all_collections_buffer + recv_displs[i], recvcounts[i]);
     //     define_hdr(recv_hdr, ncid, rank);
-    //     free_hdr(recv_hdr);
+    //     free_hdr_meta(recv_hdr);
     // }
 
 
