@@ -94,7 +94,7 @@ new_format_test_all: new_format_test_all.o baseline_ncx_app.o $(PNETCDF_DIR_FORM
 new_format_read_test_all: new_format_read_test_all.o baseline_ncx_app.o $(PNETCDF_DIR_FORMAT)/lib/libpnetcdf.a
 	$(CC) $(CFLAGS) $(INCLUDES_FORMAT) $(LFLAGS_FORMAT) $(LIBS) -o $@ $^
 	
-h5_baseline_test_all: h5_baseline_test_all.o
+h5_baseline_test_all: h5_baseline_test_all.o baseline_ncx_app.o
 	$(H5CC) $(CFLAGS) -o $@ $^ 
 
 h5_baseline_test_all_large: h5_baseline_test_all_large.o
