@@ -21,7 +21,7 @@ LFLAGS_LIB = -L$(PNETCDF_DIR_LIB)/lib
 LFLAGS_FORMAT = -L$(PNETCDF_DIR_FORMAT)/lib
 LIBS = -lpnetcdf
 
-SRCS = baseline_ex1.c baseline_ncx_app.c baseline_ncx_lib.c binary_to_nc.c binary_to_binary.c binary_to_h5.c app_baseline_test_all.c baseline_test.c lib_level_baseline_test_shared.c lib_level_baseline_test_read.c lib_level_baseline_test_dup_name.c lib_baseline_test_all.c h5_baseline_test_all.c h5_baseline_test_all_large.c h5_metadata_cache_config.c benchmark.c
+SRCS = baseline_ex1.c baseline_ncx_app.c baseline_ncx_lib.c binary_to_nc.c create_ncopy_binary.c binary_to_h5.c app_baseline_test_all.c baseline_test.c lib_level_baseline_test_shared.c lib_level_baseline_test_read.c lib_level_baseline_test_dup_name.c lib_baseline_test_all.c h5_baseline_test_all.c h5_baseline_test_all_large.c h5_metadata_cache_config.c benchmark.c
 OBJS = $(SRCS:.c=.o)
 
 LIB_PROGRAMS = binary_to_nc lib_level_baseline_test_shared lib_level_baseline_test_read lib_level_baseline_test_dup_name lib_baseline_test_all 
@@ -106,7 +106,7 @@ h5_metadata_cache_config: h5_metadata_cache_config.o
 binary_to_h5: binary_to_h5.o baseline_ncx_app.o mem_tracker.o
 	$(H5CC) $(CFLAGS) -o $@ $^
 
-binary_to_binary: binary_to_binary.o baseline_ncx_app.o mem_tracker.o
+create_ncopy_binary: create_ncopy_binary.o baseline_ncx_app.o mem_tracker.o
 	$(H5CC) $(CFLAGS) -o $@ $^
 
 h5_%.o: h5_%.c
