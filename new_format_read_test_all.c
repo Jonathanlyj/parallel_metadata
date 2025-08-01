@@ -15,31 +15,14 @@
 #include <pnetcdf.h>
 
 
-#define NY 10
-#define NX 4
-
 static int verbose;
-
+const char *source_name = NULL;
 #define ERR {if(err!=NC_NOERR){printf("Error at %s:%d : %s\n", __FILE__,__LINE__, ncmpi_strerror(err));nerrs++;}}
-#define SOURCE_NAME "/pscratch/sd/y/yll6162/FS_2M_32/new_format_test_all_256.pnc"
-static void
-usage(char *argv0)
-{
-    char *help =
-    "Usage: %s [-h] | [-q] [-k format] [file_name]\n"
-    "       [-h] Print help\n"
-    "       [-q] Quiet mode (reports when fail)\n"
-    "       [-k format] file format: 1 for CDF-1, 2 for CDF-2, 3 for NetCDF4,\n"
-    "                                4 for NetCDF4 classic model, 5 for CDF-5\n"
-    "       [filename] output netCDF file name\n";
-    fprintf(stderr, help, argv0);
-}
+// #define source_name "/files2/scratch/yll6162/parallel_metadata/new_format_test_all.pnc"
 
-
-
-/*----< pnetcdf_io() >-------------------------------------------------------*/
+/*----< read_metadata_test() >-------------------------------------------------------*/
 static int
-pnetcdf_io(MPI_Comm comm, char *filename, int cmode)
+read_metadata_test(MPI_Comm comm, const char *filename, int cmode)
 {
     int i, j, rank, nprocs, err, nerrs=0;
     int ncid, varid, blkid, dimid[2];
@@ -73,9 +56,6 @@ pnetcdf_io(MPI_Comm comm, char *filename, int cmode)
 
 
     for (int blkid = 0; blkid < nblocks; blkid++){
-        // err = ncmpi_inq_blockname(ncid, blkid, blk_name);
-        // printf("\nBlock %d name: %s\n", blkid, blk_name);
-        // err = ncmpi_inq_blkid(ncid, blk_name, &blkid);
         err= ncmpi_open_block(ncid, blkid);
         ERR;
         err = ncmpi_inq_block(ncid, blkid, NULL, &ndims, &nvars, NULL);
@@ -89,8 +69,7 @@ pnetcdf_io(MPI_Comm comm, char *filename, int cmode)
             err = ncmpi_inq_var(ncid, blkid, varid, NULL, NULL, NULL, v_dimids, NULL);
             for (int j = 0; j < v_ndims; j++){
                 err = ncmpi_inq_dimlen(ncid, blkid, v_dimids[j], &dim_sizes[j]);
-                // var_size *= dim_sizes[j];
-                // printf("\nDimension %d has size %lld\n", j, dim_sizes[j]);
+
             }
             free(dim_sizes);
             free(v_dimids);
@@ -148,7 +127,6 @@ int main(int argc, char** argv)
 {
     extern int optind;
     extern char *optarg;
-    char filename[256];
     int i, rank, kind=0, cmode=0, nerrs=0;
 
     MPI_Init(&argc, &argv);
@@ -157,21 +135,14 @@ int main(int argc, char** argv)
     verbose = 1;
 
     /* get command-line arguments */
-    while ((i = getopt(argc, argv, "hqk:")) != EOF)
-        switch(i) {
-            case 'q': verbose = 0;
-                      break;
-            case 'k': kind = atoi(optarg);
-                      break;
-            case 'h':
-            default:  if (rank==0) usage(argv[0]);
-                      MPI_Finalize();
-                      return 1;
-        }
-    if (argv[optind] == NULL) strcpy(filename, SOURCE_NAME);
-    else                      snprintf(filename, 256, "%s", argv[optind]);
+    if (argc < 2) {
+        if (rank == 0)
+            fprintf(stderr, "Usage: %s <source file name> [kind]\n", argv[0]);
+        MPI_Finalize();
+        return 1;
+    }
+    source_name = argv[1];
 
-    MPI_Bcast(filename, 256, MPI_CHAR, 0, MPI_COMM_WORLD);
 
 
     switch (kind) {
@@ -189,7 +160,7 @@ int main(int argc, char** argv)
         return 0;
     }
 #endif
-    nerrs += pnetcdf_io(MPI_COMM_WORLD, filename, cmode);
+    nerrs += read_metadata_test(MPI_COMM_WORLD, source_name, cmode);
 
     MPI_Finalize();
     return (nerrs > 0);

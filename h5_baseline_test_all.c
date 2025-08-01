@@ -364,10 +364,10 @@ int main(int argc, char *argv[]) {
             printf("%f\n", names[i], min_times[i]);
         }
     }
-        if (rank == 0) {
-        printf("H5Gcreate2 called %d times on rank 0\n", group_create_count);
-        printf("H5Dcreate called %d times on rank 0\n", dataset_create_count);
-    }
+    //     if (rank == 0) {
+    //     printf("H5Gcreate2 called %d times on rank 0\n", group_create_count);
+    //     printf("H5Dcreate called %d times on rank 0\n", dataset_create_count);
+    // }
     // Free memory used by the group array
     free_hdr_meta(&local_hdr);
     free(send_buffer);

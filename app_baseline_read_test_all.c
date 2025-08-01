@@ -15,31 +15,16 @@
 #include <pnetcdf.h>
 
 
-#define NY 10
-#define NX 4
-
 static int verbose;
 
 #define ERR {if(err!=NC_NOERR){printf("Error at %s:%d : %s\n", __FILE__,__LINE__, ncmpi_strerror(err));nerrs++;}}
-#define SOURCE_NAME "/pscratch/sd/y/yll6162/FS_2M_32/app_baseline_test_all.nc"
-static void
-usage(char *argv0)
-{
-    char *help =
-    "Usage: %s [-h] | [-q] [-k format] [file_name]\n"
-    "       [-h] Print help\n"
-    "       [-q] Quiet mode (reports when fail)\n"
-    "       [-k format] file format: 1 for CDF-1, 2 for CDF-2, 3 for NetCDF4,\n"
-    "                                4 for NetCDF4 classic model, 5 for CDF-5\n"
-    "       [filename] output netCDF file name\n";
-    fprintf(stderr, help, argv0);
-}
+const char *source_name = NULL;
 
 
 
-/*----< pnetcdf_io() >-------------------------------------------------------*/
+/*----< read_metadata_test() >-------------------------------------------------------*/
 static int
-pnetcdf_io(MPI_Comm comm, char *filename, int cmode)
+read_metadata_test(MPI_Comm comm, const char *filename, int cmode)
 {
     int i, j, rank, nprocs, err, nerrs=0;
     int ncid, varid, blkid, dimid[2];
@@ -59,9 +44,7 @@ pnetcdf_io(MPI_Comm comm, char *filename, int cmode)
     err = ncmpi_open(MPI_COMM_WORLD, filename, NC_NOWRITE, MPI_INFO_NULL, &ncid);
     ERR
 
-
-    /* read the block name & block id*/
-    char blk_name[20], var_name[20];    
+    char var_name[20];    
     int nvars;
     int ndims, v_ndims;
     int* v_dimids;
@@ -72,16 +55,13 @@ pnetcdf_io(MPI_Comm comm, char *filename, int cmode)
 
     err = ncmpi_inq(ncid, NULL, &ndims, &nvars, NULL);
     ERR;
-   for (varid = 0; varid < nvars; varid++){
+    for (varid = 0; varid < nvars; varid++){
         err = ncmpi_inq_var(ncid, varid, var_name, NULL, &v_ndims, NULL, NULL);
-        // printf("\nBlock %d has variable %s with %d dims\n", var_name, v_ndims);
         v_dimids = (int*) malloc(v_ndims * sizeof(int));
         dim_sizes = (MPI_Offset*) malloc(v_ndims * sizeof(MPI_Offset));
         err = ncmpi_inq_var(ncid, varid, NULL, NULL, NULL, v_dimids, NULL);
         for (int j = 0; j < v_ndims; j++){
             err = ncmpi_inq_dimlen(ncid, v_dimids[j], &dim_sizes[j]);
-            // var_size *= dim_sizes[j];
-            // printf("\nDimension %d has size %lld\n", j, dim_sizes[j]);
         }
         free(dim_sizes);
         free(v_dimids);
@@ -89,38 +69,6 @@ pnetcdf_io(MPI_Comm comm, char *filename, int cmode)
 
 
 
-    // total_read_time += MPI_Wtime() - read_start_time;
-
-
-    
-
-    // printf("\nRank %d will read block %d\n", rank, blkid);
-
-    // printf("\nBlock %d has %d dimensions and %d variables\n", blkid, ndims, nvars);
-
-    // Allocate memory for the raw data array (since we're dealing with integers)
-    // printf("\nVariable size: %lld\n", var_size);
-    // int *data = (int *)malloc(var_size * sizeof(int));
-    // if (data == NULL) {
-    //     printf("Error: memory allocation failed\n");
-    //     MPI_Abort(MPI_COMM_WORLD, 1);
-    // }
-    // // Read the integer variable data into the C array
-    // if ((err = ncmpi_get_var_int_all(ncid, blkid, 0, data))) {
-    //     printf("Error: ncmpi_get_var_int_all() failed (%s)\n", ncmpi_strerror(err));
-    //     MPI_Abort(MPI_COMM_WORLD, err);
-    // }
-
-    // Print a small portion of the data (for example, the first 10 values)
-    // printf("First 10 data values: ");
-    // for (int i = 0; i < 10 && i < var_size; i++) {
-    //     printf("%d ", data[i]);
-    // }
-    // ERR;
-    // free(data);
-
-
-    /* close file */
     err = ncmpi_close(ncid);
     ERR
     total_read_time += MPI_Wtime() - read_start_time;
@@ -139,7 +87,6 @@ int main(int argc, char** argv)
 {
     extern int optind;
     extern char *optarg;
-    char filename[256];
     int i, rank, kind=0, cmode=0, nerrs=0;
 
     MPI_Init(&argc, &argv);
@@ -147,31 +94,13 @@ int main(int argc, char** argv)
 
     verbose = 1;
 
-    /* get command-line arguments */
-    while ((i = getopt(argc, argv, "hqk:")) != EOF)
-        switch(i) {
-            case 'q': verbose = 0;
-                      break;
-            case 'k': kind = atoi(optarg);
-                      break;
-            case 'h':
-            default:  if (rank==0) usage(argv[0]);
-                      MPI_Finalize();
-                      return 1;
+    if (argc < 2) {
+            if (rank == 0)
+                fprintf(stderr, "Usage: %s <source_file> \n", argv[0]);
+            MPI_Finalize();
+            return 1;
         }
-    if (argv[optind] == NULL) strcpy(filename, SOURCE_NAME);
-    else                      snprintf(filename, 256, "%s", argv[optind]);
-
-    MPI_Bcast(filename, 256, MPI_CHAR, 0, MPI_COMM_WORLD);
-
-
-    switch (kind) {
-        case(2): cmode = NC_64BIT_OFFSET;             break;
-        case(3): cmode = NC_NETCDF4;                  break;
-        case(4): cmode = NC_NETCDF4|NC_CLASSIC_MODEL; break;
-        case(5): cmode = NC_64BIT_DATA;               break;
-        default: cmode = 0;
-    }
+        source_name = argv[1];
 
 #ifndef PNETCDF_DRIVER_NETCDF4
     /* netcdf4 driver is not enabled, skip */
@@ -180,7 +109,7 @@ int main(int argc, char** argv)
         return 0;
     }
 #endif
-    nerrs += pnetcdf_io(MPI_COMM_WORLD, filename, cmode);
+    nerrs += read_metadata_test(MPI_COMM_WORLD, source_name, cmode);
 
     MPI_Finalize();
     return (nerrs > 0);
