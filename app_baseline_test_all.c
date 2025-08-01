@@ -218,7 +218,10 @@ int define_all_hdr(struct hdr **all_recv_hdr, int nproc, int ncid){
 
 static int free_all_hdr(struct hdr **all_recv_hdr, int nproc){
     if (all_recv_hdr != NULL){
-        for (int i=0; i< nproc; i++) free_hdr_meta(all_recv_hdr[i]);
+        for (int i=0; i< nproc; i++){
+            free_hdr_meta(all_recv_hdr[i]);
+            free(all_recv_hdr[i]);
+        }
         free(all_recv_hdr);
     }
     return 0;
@@ -329,6 +332,7 @@ int main(int argc, char *argv[]) {
     // Before MPI_Allgatherv
     MPI_Allgatherv(send_buffer, local_hdr.xsz, MPI_BYTE, all_collections_buffer, recvcounts, recv_displs, MPI_BYTE, MPI_COMM_WORLD);
     // Deserialize the received data and print if rank is 0
+    free(send_buffer);
     
     int ncid, cmode;
     char filename[256];
@@ -367,8 +371,7 @@ int main(int argc, char *argv[]) {
     // pnetcdf_check_crt_mem(MPI_COMM_WORLD, 0);
     io_time = MPI_Wtime() - end_time1;
 
-    free_all_hdr(all_recv_hdr, nproc);
-#ifdef MEM_TRACKIN
+#ifdef MEM_TRACKING
     app_check_crt_mem(MPI_COMM_WORLD, 2);
     pnetcdf_check_crt_mem(MPI_COMM_WORLD, 2);
 #endif
@@ -377,7 +380,7 @@ int main(int argc, char *argv[]) {
     err = ncmpi_enddef(ncid); ERR
 
     end_time3 = MPI_Wtime();
-#ifdef MEM_TRACKIN
+#ifdef MEM_TRACKING
     app_check_crt_mem(MPI_COMM_WORLD, 3);
     pnetcdf_check_crt_mem(MPI_COMM_WORLD, 3);
 #endif
@@ -386,8 +389,9 @@ int main(int argc, char *argv[]) {
 
 
     // Clean up
+    free(recvcounts);
     free_hdr_meta(&local_hdr);
-    free(send_buffer);
+    free_all_hdr(all_recv_hdr, nproc);
     free(all_collections_buffer);
     free(all_collection_sizes);
     free(recv_displs);
@@ -406,7 +410,7 @@ int main(int argc, char *argv[]) {
 
 
     double times[6] = {end_to_end_time, mpi_time, io_time, enddef_time, total_def_time, close_time};
-    char *names[6] = {"end-end", "mpi-phase", "write", "enddef", "def_dim/var", "close"};
+    char *names[6] = {"end-end", "metadata exchange", "create (consistency check)", "enddef", "def_dim/var", "close"};
     double max_times[6], min_times[6];
 
 

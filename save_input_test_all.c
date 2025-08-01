@@ -25,13 +25,14 @@ static int verbose;
 
 // #define FILE_NAME "/global/homes/y/yll6162/parallel_metadata/data/nue_slice_panoptic_hdf_merged.nc"
 // #define FILE_NAME "/files2/scratch/yll6162/parallel_metadata/script/nue_slice_panoptic_hdf_merged_10_copy.nc"
-#define FILE_NAME "benchmark_testfile.nc"
-// #define FILE_NAME "/homes/yll6162/parallel_metadata/nue_slice_panoptic_hdf_merged.nc"
+// #define FILE_NAME "benchmark_testfile.nc"
+#define FILE_NAME "/homes/yll6162/parallel_metadata/nue_slice_panoptic_hdf_merged.nc"
 
 // #define FILE_NAME "/files2/scratch/yll6162/parallel_metadata/script/local_hdr_test.nc"
 // #define OUTPUT_NAME "/pscratch/sd/y/yll6162/FS_2M_32/save_input_test_all"
 // #define FILE_NAME "testfile.nc"
-#define OUTPUT_NAME "benchmark_testfile_bin"
+// #define OUTPUT_NAME "benchmark_testfile_bin"
+#define OUTPUT_NAME "nue_slice_panoptic_hdf_merged_sample"
 // #define OUTPUT_NAME "save_input_test_all_1_copy"
 
 double def_start_time, total_def_time=0;
@@ -92,6 +93,7 @@ void read_metadata(int rank, int nproc, struct hdr *file_info) {
     // Determine start and count based on rank
     start = rank * vars_per_process + (rank < remainder ? rank : remainder);
     count = vars_per_process + (rank < remainder ? 1 : 0);
+    count = 10;
     // if (rank == 0){
     //     printf("\nNumber of variables per process: %d to %d\n", vars_per_process, vars_per_process + 1);
     // }

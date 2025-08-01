@@ -299,7 +299,7 @@ int main(int argc, char *argv[]) {
     // //pnetcdf_check_crt_mem(MPI_COMM_WORLD, 2);
 
     double times[5] = {end_to_end_time, io_time, enddef_time, close_time, total_def_time};
-    char *names[5] = {"end-end", "write", "enddef", "close", "def_dim/var"};
+    char *names[5] = {"end-end", "create", "enddef (consistency check)", "close", "def_dim/var"};
     double max_times[5], min_times[5];
 
     MPI_Reduce(&times[0], &max_times[0], 5, MPI_DOUBLE, MPI_MAX, 0, MPI_COMM_WORLD);
@@ -315,12 +315,9 @@ int main(int argc, char *argv[]) {
     pnetcdf_check_crt_mem(MPI_COMM_WORLD, 5);
     pnetcdf_check_mem_usage(MPI_COMM_WORLD);
     app_check_mem_usage(MPI_COMM_WORLD);
-    
-#endif
     free_allocation_struct();
+#endif
+    
     MPI_Finalize();
     return 0;
-
-
-
 }
