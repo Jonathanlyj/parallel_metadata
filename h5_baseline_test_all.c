@@ -235,7 +235,7 @@ int main(int argc, char *argv[]) {
     read_metadata_from_file(src_file, &all_hdr);
     struct hdr local_hdr;
     distribute_metadata(rank, nproc, &all_hdr, &local_hdr);
-    free_hdr_meta(&all_hdr);
+    
 
     MPI_Barrier(MPI_COMM_WORLD);
     start_time = start_time1 = MPI_Wtime();
@@ -299,7 +299,7 @@ int main(int argc, char *argv[]) {
     struct hdr **all_recv_hdr = (struct hdr **)malloc(nproc * sizeof(struct hdr*));
 
     deserialize_all_hdr(all_recv_hdr, all_collections_buffer, recv_displs, recvcounts, nproc);
-    
+    io_time = MPI_Wtime() - end_time1;
     MPI_Barrier(MPI_COMM_WORLD);
     end_time1 = MPI_Wtime();
     int block_size = 4 * 1024 * 1024;
@@ -332,7 +332,7 @@ int main(int argc, char *argv[]) {
         define_hdr_hdf5(all_recv_hdr[i], outfile_id);
     }
     
-    io_time = MPI_Wtime() - end_time1;
+
     H5Pclose(plist_id);
     H5Pclose(fcpl_id);
     free_all_hdr(all_recv_hdr, nproc);
@@ -344,22 +344,22 @@ int main(int argc, char *argv[]) {
     close_time = end_time - end_time3;
     end_to_end_time = end_time - start_time;
     mpi_time = end_time1 - start_time1;
-    double times[5] = {end_to_end_time, mpi_time, io_time, total_crt_time, close_time};
-    char *names[5] = {"end-end", "metadata exchange", "create (consistency check)", "create (consistency check)", "close"};
-    double max_times[5], min_times[5];
+    double times[4] = {end_to_end_time, mpi_time, io_time, close_time};
+    char *names[4] = {"end-end", "metadata exchange", "create (consistency check)", "close"};
+    double max_times[4], min_times[4];
 
 
-    MPI_Reduce(&times[0], &max_times[0], 5, MPI_DOUBLE, MPI_MAX, 0, MPI_COMM_WORLD);
-    MPI_Reduce(&times[0], &min_times[0], 5, MPI_DOUBLE, MPI_MIN, 0, MPI_COMM_WORLD);
+    MPI_Reduce(&times[0], &max_times[0], 4, MPI_DOUBLE, MPI_MAX, 0, MPI_COMM_WORLD);
+    MPI_Reduce(&times[0], &min_times[0], 4, MPI_DOUBLE, MPI_MIN, 0, MPI_COMM_WORLD);
     if (rank == 0) printf("ik: %u, lk: %u\n", ik, lk);
-    for (int i = 0; i < 5; i++){
+    for (int i = 0; i < 4; i++){
         if (rank == 0) {
             
             printf("Max %s time: %f seconds\n", names[i], max_times[i]);
             printf("Min %s time: %f seconds\n", names[i], min_times[i]);
         }
     }
-    for (int i = 0; i < 5; i++){
+    for (int i = 0; i < 4; i++){
         if (rank == 0) {
             printf("%f\n", names[i], max_times[i]);
             printf("%f\n", names[i], min_times[i]);
@@ -371,6 +371,7 @@ int main(int argc, char *argv[]) {
     // }
     // Free memory used by the group array
     free_hdr_meta(&local_hdr);
+    free_hdr_meta(&all_hdr);
     free(send_buffer);
     free(all_collections_buffer);
     free(all_collection_sizes);
