@@ -82,8 +82,9 @@ void split_var_name(const char* full_name, char* group_name, char* dataset_name)
         strncpy(group_name, full_name, group_len);
         group_name[group_len] = '\0';
 
-        if (strncmp(group_name, "_grp", 4) == 0) {
-            memmove(group_name, group_name + 4, strlen(group_name + 4) + 1);
+        // ✅ If the group_name starts with "_grp_", remove it
+        if (strncmp(group_name, "_grp_", 5) == 0) {
+            memmove(group_name, group_name + 5, strlen(group_name + 5) + 1);
         }
 
         strcpy(dataset_name, split_ptr + 1);
