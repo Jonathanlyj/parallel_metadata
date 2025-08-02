@@ -12,13 +12,14 @@
 
 #define FAIL -1
 
-#define DIRTY_BYTES_THRESHOLD (16 * 1024 * 1024) // 16 MB
+#define DIRTY_BYTES_THRESHOLD (256 * 1024) // 256kb
 
 const char *src_file = NULL;
 const char *out_file = NULL;
-double crt_start_time, total_crt_time=0;
+double crt_start_time,crt_time=0;
 int group_create_count = 0;
 int dataset_create_count = 0;
+
 //used to avoid open & closing same group for every dataset
 
 char last_group_name[256] = ""; 
@@ -82,10 +83,9 @@ void split_var_name(const char* full_name, char* group_name, char* dataset_name)
         strncpy(group_name, full_name, group_len);
         group_name[group_len] = '\0';
 
-        // ✅ If the group_name starts with "_grp_", remove it
-        if (strncmp(group_name, "_grp_", 5) == 0) {
-            memmove(group_name, group_name + 5, strlen(group_name + 5) + 1);
-        }
+        // remove "_grp_", 
+
+        memmove(group_name, group_name + 5, strlen(group_name + 5) + 1);
 
         strcpy(dataset_name, split_ptr + 1);
     } else {
@@ -123,9 +123,10 @@ int define_hdr_hdf5(struct hdr *hdr_data, hid_t file_id) {
             //need to create a new group, the group name has changed
             if (current_group_id >= 0)
                 H5Gclose(current_group_id);
-
+            crt_start_time = MPI_Wtime();
             current_group_id = H5Gcreate2(file_id, group_name,
                                           H5P_DEFAULT, H5P_DEFAULT, H5P_DEFAULT);
+            crt_time += MPI_Wtime() - crt_start_time;
             strcpy(last_group_name, group_name);
         } else if(i == 0){
             // If it's the first variable and the group is the same as the last one, we need to reopen the group
@@ -159,8 +160,10 @@ int define_hdr_hdf5(struct hdr *hdr_data, hid_t file_id) {
 
 
         // Create dataset in current group
+        crt_start_time = MPI_Wtime();
         hid_t dset_id = H5Dcreate2(current_group_id, dataset_name, h5type, space_id,
                                    H5P_DEFAULT, dcpl_id, H5P_DEFAULT);
+        crt_time += MPI_Wtime() - crt_start_time;
         H5Pclose(dcpl_id);
         H5Sclose(space_id);
 
@@ -299,7 +302,7 @@ int main(int argc, char *argv[]) {
     struct hdr **all_recv_hdr = (struct hdr **)malloc(nproc * sizeof(struct hdr*));
 
     deserialize_all_hdr(all_recv_hdr, all_collections_buffer, recv_displs, recvcounts, nproc);
-    io_time = MPI_Wtime() - end_time1;
+    
     MPI_Barrier(MPI_COMM_WORLD);
     end_time1 = MPI_Wtime();
     int block_size = 4 * 1024 * 1024;
@@ -332,7 +335,7 @@ int main(int argc, char *argv[]) {
         define_hdr_hdf5(all_recv_hdr[i], outfile_id);
     }
     
-
+    io_time = MPI_Wtime() - end_time1;
     H5Pclose(plist_id);
     H5Pclose(fcpl_id);
     free_all_hdr(all_recv_hdr, nproc);
@@ -344,22 +347,22 @@ int main(int argc, char *argv[]) {
     close_time = end_time - end_time3;
     end_to_end_time = end_time - start_time;
     mpi_time = end_time1 - start_time1;
-    double times[4] = {end_to_end_time, mpi_time, io_time, close_time};
-    char *names[4] = {"end-end", "metadata exchange", "create (consistency check)", "close"};
-    double max_times[4], min_times[4];
+    double times[5] = {end_to_end_time, mpi_time, io_time, close_time, crt_time};
+    char *names[5] = {"end-end", "metadata exchange", "create (consistency check)", "close", "H5Dcreate & H5Gcreate"};
+    double max_times[5], min_times[5];
 
 
-    MPI_Reduce(&times[0], &max_times[0], 4, MPI_DOUBLE, MPI_MAX, 0, MPI_COMM_WORLD);
-    MPI_Reduce(&times[0], &min_times[0], 4, MPI_DOUBLE, MPI_MIN, 0, MPI_COMM_WORLD);
+    MPI_Reduce(&times[0], &max_times[0], 5, MPI_DOUBLE, MPI_MAX, 0, MPI_COMM_WORLD);
+    MPI_Reduce(&times[0], &min_times[0], 5, MPI_DOUBLE, MPI_MIN, 0, MPI_COMM_WORLD);
     if (rank == 0) printf("ik: %u, lk: %u\n", ik, lk);
-    for (int i = 0; i < 4; i++){
+    for (int i = 0; i < 5; i++){
         if (rank == 0) {
             
             printf("Max %s time: %f seconds\n", names[i], max_times[i]);
             printf("Min %s time: %f seconds\n", names[i], min_times[i]);
         }
     }
-    for (int i = 0; i < 4; i++){
+    for (int i = 0; i < 5; i++){
         if (rank == 0) {
             printf("%f\n", names[i], max_times[i]);
             printf("%f\n", names[i], min_times[i]);
